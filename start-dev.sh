@@ -192,6 +192,7 @@ PORT=${PORT:-3001}
 # ------------------------------------------------------------
 info "Creating required directories..."
 mkdir -p "$APP_DIR/downloads" "$APP_DIR/logs"
+chmod -R 755 "$APP_DIR/.venv"
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 log "Directories created"
 
