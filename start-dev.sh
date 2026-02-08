@@ -41,6 +41,9 @@ if [[ "$APP_DIR" == /root* ]]; then
     mkdir -p /opt/ytdl
     cp -a "$APP_DIR/." /opt/ytdl/
     APP_DIR="/opt/ytdl"
+    # Remove any copied .venv — it contains hardcoded paths to /root that
+    # the ytd service user cannot access. It will be rebuilt in the new location.
+    rm -rf "$APP_DIR/.venv"
     log "App moved to $APP_DIR"
 fi
 
