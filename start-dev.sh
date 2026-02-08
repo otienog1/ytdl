@@ -71,14 +71,20 @@ else
 fi
 
 # ------------------------------------------------------------
-# 5. Install Python dependencies via pipenv
+# 5. Create virtualenv and install dependencies from Pipfile
 # ------------------------------------------------------------
-info "Installing Python dependencies via pipenv..."
+info "Creating virtualenv and installing dependencies from Pipfile..."
 cd "$APP_DIR"
-pipenv install
+
+# Set PIPENV_VENV_IN_PROJECT so the .venv lives inside the project dir
+export PIPENV_VENV_IN_PROJECT=1
+
+# Create the virtualenv and install all packages listed in Pipfile
+pipenv install --deploy
 log "Python dependencies installed"
 
 # Get pipenv virtualenv path for use in systemd services
+# (pipenv shell is interactive; we use the venv path directly instead)
 VENV_PATH=$(pipenv --venv)
 log "Virtualenv: $VENV_PATH"
 
