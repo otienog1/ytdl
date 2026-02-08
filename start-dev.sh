@@ -192,8 +192,12 @@ PORT=${PORT:-3001}
 # ------------------------------------------------------------
 info "Creating required directories..."
 mkdir -p "$APP_DIR/downloads" "$APP_DIR/logs"
+# Fix permissions on .venv so the service user can execute binaries
 chmod -R 755 "$APP_DIR/.venv"
+# Transfer ownership of entire app dir to service user
 chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+# Ensure root can still read/write app files for future updates
+chmod 755 "$APP_DIR"
 log "Directories created"
 
 # ------------------------------------------------------------
