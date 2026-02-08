@@ -177,6 +177,9 @@ FILE_EXPIRY_HOURS=12
 # FFmpeg (system installation)
 FFMPEG_PATH=${FFMPEG_BIN}
 FFPROBE_PATH=${FFPROBE_BIN}
+
+# yt-dlp (virtualenv installation)
+YT_DLP_PATH=${VENV_PATH}/bin/yt-dlp
 EOF
 
     log ".env.production created"
