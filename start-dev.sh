@@ -34,6 +34,16 @@ if [ "$EUID" -ne 0 ]; then
     error "Please run as root: sudo bash start-dev.sh"
 fi
 
+# Move app out of /root if needed — the ytd service user cannot access /root
+if [[ "$APP_DIR" == /root* ]]; then
+    warn "App is under /root which is not accessible by the '$APP_USER' service user."
+    info "Moving app to /opt/ytdl..."
+    mkdir -p /opt/ytdl
+    cp -a "$APP_DIR/." /opt/ytdl/
+    APP_DIR="/opt/ytdl"
+    log "App moved to $APP_DIR"
+fi
+
 # ------------------------------------------------------------
 # 2. System dependencies
 # ------------------------------------------------------------
@@ -53,7 +63,7 @@ log "System dependencies installed"
 # ------------------------------------------------------------
 if ! command -v pipenv &>/dev/null; then
     info "Installing pipenv..."
-    pip3 install pipenv
+    apt-get install -y -qq pipenv || pip3 install --break-system-packages pipenv
     log "pipenv installed"
 else
     log "pipenv already installed"
@@ -87,6 +97,28 @@ log "Python dependencies installed"
 # (pipenv shell is interactive; we use the venv path directly instead)
 VENV_PATH=$(pipenv --venv)
 log "Virtualenv: $VENV_PATH"
+
+# ------------------------------------------------------------
+# 5b. Verify ffmpeg and yt-dlp installations
+# ------------------------------------------------------------
+info "Verifying ffmpeg and yt-dlp..."
+
+# Confirm system ffmpeg is available
+if command -v ffmpeg &>/dev/null; then
+    FFMPEG_BIN=$(which ffmpeg)
+    FFPROBE_BIN=$(which ffprobe)
+    log "ffmpeg: $FFMPEG_BIN"
+    log "ffprobe: $FFPROBE_BIN"
+else
+    error "ffmpeg not found after installation. Aborting."
+fi
+
+# Verify yt-dlp is installed inside the virtualenv
+if "$VENV_PATH/bin/python" -c "import yt_dlp; print('yt-dlp version:', yt_dlp.version.__version__)" 2>/dev/null; then
+    log "yt-dlp verified"
+else
+    warn "yt-dlp not found in virtualenv - check Pipfile"
+fi
 
 # ------------------------------------------------------------
 # 6. Configure environment
@@ -139,9 +171,9 @@ RATE_LIMIT_MAX_REQUESTS=30
 # File Cleanup
 FILE_EXPIRY_HOURS=12
 
-# System FFmpeg (installed via apt)
-FFMPEG_PATH=/usr/bin/ffmpeg
-FFPROBE_PATH=/usr/bin/ffprobe
+# FFmpeg (system installation)
+FFMPEG_PATH=${FFMPEG_BIN}
+FFPROBE_PATH=${FFPROBE_BIN}
 EOF
 
     log ".env.production created"
