@@ -34,16 +34,18 @@ class YouTubeService:
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-            # Use multiple player clients as fallback (helps bypass bot detection)
-            cmd.extend(['--extractor-args', 'youtube:player_client=ios,tv_embedded,android'])
+            # Use mobile player clients (works best without cookies)
+            # Android client is most reliable for bypassing bot detection
+            cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
+
+            # Add cookies only if proxy is not available (cookies + web client has JS challenges)
+            # if self.cookies_file and os.path.exists(self.cookies_file) and not self.proxy:
+            #     cmd.extend(['--cookies', self.cookies_file])
+            #     cmd.extend(['--extractor-args', 'youtube:js_runtime=nodejs'])
 
             # Add proxy if configured (helps bypass IP-based blocking on cloud servers)
             if self.proxy:
                 cmd.extend(['--proxy', self.proxy])
-
-            # Add cookies if available (helps avoid bot detection)
-            if self.cookies_file and os.path.exists(self.cookies_file):
-                cmd.extend(['--cookies', self.cookies_file])
 
             result = subprocess.run(
                 cmd,
@@ -91,16 +93,18 @@ class YouTubeService:
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-            # Use multiple player clients as fallback (helps bypass bot detection)
-            cmd.extend(['--extractor-args', 'youtube:player_client=ios,tv_embedded,android'])
+            # Use mobile player clients (works best without cookies)
+            # Android client is most reliable for bypassing bot detection
+            cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
+
+            # Add cookies only if proxy is not available (cookies + web client has JS challenges)
+            # if self.cookies_file and os.path.exists(self.cookies_file) and not self.proxy:
+            #     cmd.extend(['--cookies', self.cookies_file])
+            #     cmd.extend(['--extractor-args', 'youtube:js_runtime=nodejs'])
 
             # Add proxy if configured (helps bypass IP-based blocking on cloud servers)
             if self.proxy:
                 cmd.extend(['--proxy', self.proxy])
-
-            # Add cookies if available
-            if self.cookies_file and os.path.exists(self.cookies_file):
-                cmd.extend(['--cookies', self.cookies_file])
 
             # Download with real-time progress tracking
             process = subprocess.Popen(
