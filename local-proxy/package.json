@@ -1,0 +1,21 @@
+{
+  "name": "ytd-residential-proxy",
+  "version": "1.0.0",
+  "description": "Local SOCKS5 proxy server for YouTube Shorts downloader - runs on residential IP",
+  "main": "simple-proxy.js",
+  "scripts": {
+    "start": "node simple-proxy.js",
+    "start:auth": "node simple-proxy.js --port 1080 --auth user:password"
+  },
+  "keywords": [
+    "proxy",
+    "socks5",
+    "youtube",
+    "residential"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "socksv5": "^0.0.6"
+  }
+}
