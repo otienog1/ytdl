@@ -1,29 +1,32 @@
 #!/bin/bash
-set -e
+# YouTube Shorts Downloader - Complete Backend Installation Script
+# Run as root on a fresh Ubuntu/Debian server
+# Usage: sudo bash install.sh
+#
+# This script combines functionality from:
+# - start-dev.sh: Main installation and setup
+# - check-gcs.sh: GCS configuration verification
+# - fix-nodejs-path.sh: Node.js PATH configuration
+# - deploy-files.sh: File deployment utilities
+# - deploy-update.sh: Update deployment
 
-# ============================================================
-# YouTube Shorts Downloader - Production Install Script
-# Run as: bash install.sh
-# ============================================================
+set -e
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_USER="ytd"
-SERVICE_PREFIX="ytd"
-
-log()  { echo -e "${GREEN}[✓]${NC} $1"; }
-warn() { echo -e "${YELLOW}[!]${NC} $1"; }
-info() { echo -e "${BLUE}[→]${NC} $1"; }
+log()   { echo -e "${GREEN}[✓]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
+info()  { echo -e "${BLUE}[→]${NC} $1"; }
 error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
 
+clear
 echo ""
 echo "============================================================"
-echo "  YouTube Shorts Downloader - Production Setup"
+echo "  YouTube Shorts Downloader - Backend Installation"
 echo "============================================================"
 echo ""
 
@@ -35,87 +38,232 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # ------------------------------------------------------------
-# 2. System dependencies
+# 2. Get configuration from user
 # ------------------------------------------------------------
-info "Installing system dependencies..."
+info "Please provide the following configuration details:"
+echo ""
+
+read -p "Domain name (e.g., ytd.timobosafaris.com): " DOMAIN_NAME
+read -p "MongoDB URI: " MONGODB_URI
+read -p "Redis URL: " REDIS_URL
+read -p "GCP Project ID: " GCP_PROJECT_ID
+read -p "GCP Bucket Name: " GCP_BUCKET_NAME
+read -p "Frontend CORS Origins (comma-separated, e.g., https://ytd-bay.vercel.app): " CORS_ORIGINS
+
+echo ""
+read -p "Do you want to set up SSL with Let's Encrypt? (y/n): " SETUP_SSL
+if [ "$SETUP_SSL" == "y" ]; then
+    read -p "Email for Let's Encrypt notifications: " SSL_EMAIL
+fi
+
+echo ""
+read -p "Do you have a proxy for YouTube downloads? (y/n): " HAS_PROXY
+if [ "$HAS_PROXY" == "y" ]; then
+    read -p "Proxy URL (e.g., socks5://user:pass@host:port or http://user:pass@host:port): " PROXY_URL
+else
+    PROXY_URL=""
+fi
+
+echo ""
+info "Configuration summary:"
+echo "  Domain: $DOMAIN_NAME"
+echo "  SSL: $SETUP_SSL"
+echo "  Proxy: ${PROXY_URL:-None}"
+echo ""
+read -p "Proceed with installation? (y/n): " CONFIRM
+if [ "$CONFIRM" != "y" ]; then
+    error "Installation cancelled"
+fi
+
+# ------------------------------------------------------------
+# 3. System Updates and Dependencies
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 1: Installing System Dependencies"
+echo "============================================================"
+echo ""
+
+info "Updating system packages..."
 apt-get update -qq
+apt-get upgrade -y -qq
+
+info "Installing required packages..."
 apt-get install -y -qq \
-    python3 python3-pip python3-venv \
+    python3 \
+    python3-pip \
+    python3-venv \
     ffmpeg \
     nginx \
-    curl wget git \
+    curl \
+    git \
+    wget \
+    certbot \
+    python3-certbot-nginx \
     build-essential \
-    libssl-dev libffi-dev python3-dev
+    libssl-dev \
+    libffi-dev \
+    python3-dev
+
+# Install Node.js 20 LTS (required for yt-dlp JavaScript runtime)
+if ! command -v node &> /dev/null || [ "$(node -v | cut -d'.' -f1 | tr -d 'v')" -lt 18 ]; then
+    info "Installing Node.js 20 LTS..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y -qq nodejs
+fi
+
+NODE_PATH=$(which node)
+NODE_DIR=$(dirname "$NODE_PATH")
+log "Node.js installed: $(node --version) at $NODE_PATH"
+
 log "System dependencies installed"
 
 # ------------------------------------------------------------
-# 3. Create app user if not exists
+# 4. Install pipenv
 # ------------------------------------------------------------
-if ! id "$APP_USER" &>/dev/null; then
+echo ""
+echo "============================================================"
+echo "  Step 2: Installing pipenv"
+echo "============================================================"
+echo ""
+
+info "Installing pipenv..."
+apt-get install -y -qq pipenv || pip3 install --break-system-packages pipenv
+log "Pipenv installed"
+
+# ------------------------------------------------------------
+# 5. Create Application User
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 3: Creating Application User"
+echo "============================================================"
+echo ""
+
+APP_USER="ytd"
+if id "$APP_USER" &>/dev/null; then
+    warn "User '$APP_USER' already exists"
+else
     info "Creating user '$APP_USER'..."
     useradd -m -s /bin/bash "$APP_USER"
     log "User '$APP_USER' created"
-else
-    log "User '$APP_USER' already exists"
 fi
 
 # ------------------------------------------------------------
-# 4. Set up virtual environment
+# 6. Setup Application Directory
 # ------------------------------------------------------------
-info "Setting up Python virtual environment..."
-cd "$APP_DIR"
-if [ ! -d "venv" ]; then
-    python3 -m venv venv
+echo ""
+echo "============================================================"
+echo "  Step 4: Setting Up Application"
+echo "============================================================"
+echo ""
+
+APP_DIR="/opt/ytdl"
+CURRENT_DIR=$(pwd)
+
+info "Setting up application directory at $APP_DIR..."
+
+# If current directory is not /opt/ytdl, copy files there
+if [ "$CURRENT_DIR" != "$APP_DIR" ]; then
+    if [ -d "$APP_DIR" ]; then
+        warn "Directory $APP_DIR already exists, backing up..."
+        mv "$APP_DIR" "${APP_DIR}.backup.$(date +%s)"
+    fi
+
+    mkdir -p "$APP_DIR"
+    info "Copying application files..."
+    cp -r . "$APP_DIR/"
+    cd "$APP_DIR"
+else
+    info "Already in $APP_DIR"
 fi
-source venv/bin/activate
-pip install --upgrade pip -q
-pip install -r requirements.txt -q
+
+# Set permissions
+chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+chmod -R 755 "$APP_DIR"
+
+log "Application directory set up"
+
+# ------------------------------------------------------------
+# 7. Install Python Dependencies
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 5: Installing Python Dependencies"
+echo "============================================================"
+echo ""
+
+info "Installing Python dependencies with pipenv..."
+
+# Force pipenv to create venv in project
+export PIPENV_VENV_IN_PROJECT=1
+
+# Remove old venv if exists
+if [ -d ".venv" ]; then
+    warn "Removing old virtual environment..."
+    rm -rf .venv
+fi
+
+# Install dependencies as ytd user
+sudo -u "$APP_USER" -E bash << 'EOFPIPENV'
+export PIPENV_VENV_IN_PROJECT=1
+cd /opt/ytdl
+
+# Install dependencies
+pipenv install --deploy
+EOFPIPENV
+
+# Get venv path
+VENV_PATH=$(cd "$APP_DIR" && pipenv --venv)
+log "Python dependencies installed at $VENV_PATH"
+
+# Verify installations
+info "Verifying installations..."
+if "$VENV_PATH/bin/python" -c "import yt_dlp; print('yt-dlp version:', yt_dlp.version.__version__)" 2>/dev/null; then
+    log "yt-dlp verified"
+else
+    warn "yt-dlp not found in virtualenv - check Pipfile"
+fi
+
+# Set venv permissions
+chmod -R 755 .venv
+chown -R "$APP_USER":"$APP_USER" .venv
+
 log "Python dependencies installed"
 
 # ------------------------------------------------------------
-# 5. Configure environment
+# 8. Create Environment File
 # ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 6: Creating Environment Configuration"
+echo "============================================================"
+echo ""
+
 ENV_FILE="$APP_DIR/.env.production"
 
-if [ ! -f "$ENV_FILE" ]; then
-    info "Creating .env.production..."
+info "Creating .env.production file..."
 
-    echo ""
-    warn "You need to provide your configuration values."
-    echo ""
-
-    read -p "MongoDB URI: " MONGODB_URI
-    read -p "Redis URL: " REDIS_URL
-    read -p "GCP Project ID [divine-actor-473706-k4]: " GCP_PROJECT_ID
-    GCP_PROJECT_ID=${GCP_PROJECT_ID:-divine-actor-473706-k4}
-    read -p "GCP Bucket Name [ytdl_bkt]: " GCP_BUCKET_NAME
-    GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-ytdl_bkt}
-    read -p "GCP Credentials JSON path [$APP_DIR/divine-actor-473706-k4-fdec9ee56ba0.json]: " GCP_CREDS
-    GCP_CREDS=${GCP_CREDS:-$APP_DIR/divine-actor-473706-k4-fdec9ee56ba0.json}
-    read -p "CORS Origins (your frontend URL, e.g. https://yourdomain.com): " CORS_ORIGINS
-    read -p "Port [3001]: " PORT
-    PORT=${PORT:-3001}
-
-    cat > "$ENV_FILE" <<EOF
+cat > "$ENV_FILE" << EOFENV
 # Database
-MONGODB_URI=${MONGODB_URI}
+MONGODB_URI=$MONGODB_URI
 
 # Redis
-REDIS_URL=${REDIS_URL}
+REDIS_URL=$REDIS_URL
 
 # Celery (uses Redis)
 CELERY_BROKER_URL=${REDIS_URL}/0
 CELERY_RESULT_BACKEND=${REDIS_URL}/0
 
 # Google Cloud Storage
-GCP_PROJECT_ID=${GCP_PROJECT_ID}
-GCP_BUCKET_NAME=${GCP_BUCKET_NAME}
-GOOGLE_APPLICATION_CREDENTIALS=${GCP_CREDS}
+GCP_PROJECT_ID=$GCP_PROJECT_ID
+GCP_BUCKET_NAME=$GCP_BUCKET_NAME
+GOOGLE_APPLICATION_CREDENTIALS=/opt/ytdl/gcp-credentials.json
 
 # FastAPI Server
-PORT=${PORT}
+PORT=3001
 ENVIRONMENT=production
-CORS_ORIGINS=${CORS_ORIGINS}
+CORS_ORIGINS=$CORS_ORIGINS
 
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000
@@ -124,24 +272,27 @@ RATE_LIMIT_MAX_REQUESTS=30
 # File Cleanup
 FILE_EXPIRY_HOURS=12
 
-# System FFmpeg (installed via apt)
+# System Paths
 FFMPEG_PATH=/usr/bin/ffmpeg
 FFPROBE_PATH=/usr/bin/ffprobe
-EOF
+YT_DLP_PATH=/opt/ytdl/.venv/bin/yt-dlp
+EOFENV
 
-    log ".env.production created"
-else
-    warn ".env.production already exists, skipping"
+# Add proxy if configured
+if [ -n "$PROXY_URL" ]; then
+    echo "YT_DLP_PROXY=$PROXY_URL" >> "$ENV_FILE"
 fi
 
-# Source the env to get PORT for nginx config
-set -a
-source "$ENV_FILE"
-set +a
-PORT=${PORT:-3001}
+chmod 640 "$ENV_FILE"
+chown "$APP_USER":"$APP_USER" "$ENV_FILE"
+
+log "Environment configuration created"
+
+warn "IMPORTANT: You need to upload your GCP credentials file to /opt/ytdl/gcp-credentials.json"
+warn "Example: scp your-gcp-credentials.json root@server:/opt/ytdl/gcp-credentials.json"
 
 # ------------------------------------------------------------
-# 6. Create required directories
+# 9. Create Required Directories
 # ------------------------------------------------------------
 info "Creating required directories..."
 mkdir -p "$APP_DIR/downloads" "$APP_DIR/logs"
@@ -149,169 +300,259 @@ chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 log "Directories created"
 
 # ------------------------------------------------------------
-# 7. Install systemd services
+# 10. Create Systemd Services
 # ------------------------------------------------------------
-info "Installing systemd services..."
+echo ""
+echo "============================================================"
+echo "  Step 7: Creating Systemd Services"
+echo "============================================================"
+echo ""
 
-# FastAPI service
-cat > "/etc/systemd/system/${SERVICE_PREFIX}-api.service" <<EOF
+SERVICE_PREFIX="ytd"
+
+info "Creating API service..."
+cat > "/etc/systemd/system/${SERVICE_PREFIX}-api.service" << 'EOFAPI'
 [Unit]
 Description=YTD FastAPI Server
 After=network.target
 
 [Service]
-User=${APP_USER}
-WorkingDirectory=${APP_DIR}
-Environment="PATH=${APP_DIR}/venv/bin:/usr/bin:/bin"
-EnvironmentFile=${ENV_FILE}
-ExecStart=${APP_DIR}/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT} --workers 2
+Type=simple
+User=ytd
+Group=ytd
+WorkingDirectory=/opt/ytdl
+Environment="PATH=/opt/ytdl/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/ytdl/.env.production
+ExecStart=/opt/ytdl/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 3001
 Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOFAPI
 
-# Celery worker service
-cat > "/etc/systemd/system/${SERVICE_PREFIX}-worker.service" <<EOF
+info "Creating Celery worker service..."
+cat > "/etc/systemd/system/${SERVICE_PREFIX}-worker.service" << 'EOFWORKER'
 [Unit]
 Description=YTD Celery Worker
 After=network.target
 
 [Service]
-User=${APP_USER}
-WorkingDirectory=${APP_DIR}
-Environment="PATH=${APP_DIR}/venv/bin:/usr/bin:/bin"
-EnvironmentFile=${ENV_FILE}
-ExecStart=${APP_DIR}/venv/bin/celery -A app.queue.celery_app worker --loglevel=info --concurrency=2
+Type=simple
+User=ytd
+Group=ytd
+WorkingDirectory=/opt/ytdl
+Environment="PATH=/opt/ytdl/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/ytdl/.env.production
+ExecStart=/opt/ytdl/.venv/bin/celery -A app.queue.celery_app worker --loglevel=info
 Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOFWORKER
 
-# Celery beat service
-cat > "/etc/systemd/system/${SERVICE_PREFIX}-beat.service" <<EOF
+info "Creating Celery beat service..."
+cat > "/etc/systemd/system/${SERVICE_PREFIX}-beat.service" << 'EOFBEAT'
 [Unit]
 Description=YTD Celery Beat Scheduler
 After=network.target
 
 [Service]
-User=${APP_USER}
-WorkingDirectory=${APP_DIR}
-Environment="PATH=${APP_DIR}/venv/bin:/usr/bin:/bin"
-EnvironmentFile=${ENV_FILE}
-ExecStart=${APP_DIR}/venv/bin/celery -A app.queue.celery_app beat --loglevel=info
+Type=simple
+User=ytd
+Group=ytd
+WorkingDirectory=/opt/ytdl
+Environment="PATH=/opt/ytdl/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/ytdl/.env.production
+ExecStart=/opt/ytdl/.venv/bin/celery -A app.queue.celery_app beat --loglevel=info
 Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOFBEAT
 
-systemctl daemon-reload
-systemctl enable "${SERVICE_PREFIX}-api" "${SERVICE_PREFIX}-worker" "${SERVICE_PREFIX}-beat"
-log "Systemd services installed"
+log "Systemd services created"
 
 # ------------------------------------------------------------
-# 8. Configure Nginx
+# 11. Configure Nginx
 # ------------------------------------------------------------
-info "Configuring Nginx..."
+echo ""
+echo "============================================================"
+echo "  Step 8: Configuring Nginx"
+echo "============================================================"
+echo ""
 
-read -p "Enter your domain name (or server IP if no domain): " DOMAIN
+info "Creating Nginx configuration..."
 
-cat > "/etc/nginx/sites-available/${SERVICE_PREFIX}" <<EOF
+cat > /etc/nginx/sites-available/ytd << EOFNGINX
 server {
     listen 80;
-    server_name ${DOMAIN};
+    server_name $DOMAIN_NAME;
 
     client_max_body_size 100M;
 
     location / {
-        proxy_pass http://127.0.0.1:${PORT};
+        proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_read_timeout 300s;
-        proxy_connect_timeout 75s;
-        proxy_send_timeout 300s;
+        proxy_cache_bypass \$http_upgrade;
+
+        # Timeout settings for long-running downloads
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
+        proxy_read_timeout 300;
+        send_timeout 300;
     }
 }
-EOF
+EOFNGINX
 
 # Enable site
-ln -sf "/etc/nginx/sites-available/${SERVICE_PREFIX}" "/etc/nginx/sites-enabled/${SERVICE_PREFIX}"
+if [ -L /etc/nginx/sites-enabled/ytd ]; then
+    rm /etc/nginx/sites-enabled/ytd
+fi
+ln -s /etc/nginx/sites-available/ytd /etc/nginx/sites-enabled/
 
-# Remove default site if exists
-rm -f /etc/nginx/sites-enabled/default
+# Remove default site
+if [ -L /etc/nginx/sites-enabled/default ]; then
+    rm /etc/nginx/sites-enabled/default
+fi
 
-nginx -t && systemctl restart nginx
+# Test nginx configuration
+nginx -t
+
 log "Nginx configured"
 
 # ------------------------------------------------------------
-# 9. SSL setup (optional)
+# 12. Setup SSL (if requested)
 # ------------------------------------------------------------
-echo ""
-read -p "Set up SSL with Let's Encrypt? (requires a valid domain) [y/N]: " SETUP_SSL
+if [ "$SETUP_SSL" == "y" ]; then
+    echo ""
+    echo "============================================================"
+    echo "  Step 9: Setting Up SSL with Let's Encrypt"
+    echo "============================================================"
+    echo ""
 
-if [[ "$SETUP_SSL" =~ ^[Yy]$ ]]; then
-    info "Installing Certbot..."
-    apt-get install -y -qq certbot python3-certbot-nginx
-    certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos -m "admin@${DOMAIN}" || warn "SSL setup failed - you can run 'sudo certbot --nginx -d ${DOMAIN}' manually later"
-    log "SSL configured"
+    info "Obtaining SSL certificate..."
+    certbot --nginx -d "$DOMAIN_NAME" --non-interactive --agree-tos -m "$SSL_EMAIL" --redirect || warn "SSL setup failed - run 'sudo certbot --nginx -d ${DOMAIN_NAME}' manually"
+
+    log "SSL certificate obtained and configured"
 fi
 
 # ------------------------------------------------------------
-# 10. Start services
+# 13. Start Services
 # ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 10: Starting Services"
+echo "============================================================"
+echo ""
+
+info "Reloading systemd daemon..."
+systemctl daemon-reload
+
+info "Enabling services..."
+systemctl enable ytd-api ytd-worker ytd-beat nginx
+
 info "Starting services..."
-systemctl start "${SERVICE_PREFIX}-api" "${SERVICE_PREFIX}-worker" "${SERVICE_PREFIX}-beat"
+systemctl restart nginx
+systemctl restart ytd-api ytd-worker ytd-beat
 
 sleep 3
 
-# Check status
-if systemctl is-active --quiet "${SERVICE_PREFIX}-api"; then
+# Check service status
+echo ""
+info "Checking service status..."
+if systemctl is-active --quiet ytd-api; then
     log "API server is running"
 else
-    warn "API server failed to start - check: sudo journalctl -u ${SERVICE_PREFIX}-api -n 50"
+    warn "API server failed to start"
 fi
 
-if systemctl is-active --quiet "${SERVICE_PREFIX}-worker"; then
+if systemctl is-active --quiet ytd-worker; then
     log "Celery worker is running"
 else
-    warn "Celery worker failed to start - check: sudo journalctl -u ${SERVICE_PREFIX}-worker -n 50"
+    warn "Celery worker failed to start"
 fi
 
-if systemctl is-active --quiet "${SERVICE_PREFIX}-beat"; then
+if systemctl is-active --quiet ytd-beat; then
     log "Celery beat is running"
 else
-    warn "Celery beat failed to start - check: sudo journalctl -u ${SERVICE_PREFIX}-beat -n 50"
+    warn "Celery beat failed to start"
+fi
+
+if systemctl is-active --quiet nginx; then
+    log "Nginx is running"
+else
+    warn "Nginx failed to start"
 fi
 
 # ------------------------------------------------------------
-# Done
+# 14. Verify GCS Configuration (from check-gcs.sh)
 # ------------------------------------------------------------
 echo ""
 echo "============================================================"
-echo -e "${GREEN}  Installation complete!${NC}"
+echo "  Step 11: Verifying Configuration"
 echo "============================================================"
 echo ""
-echo "  API Server:    http://${DOMAIN}"
-echo "  Health Check:  http://${DOMAIN}/health"
-echo "  API Docs:      http://${DOMAIN}/docs"
+
+info "GCS configuration will be verified once you upload credentials..."
+warn "Remember to upload: scp your-credentials.json root@server:/opt/ytdl/gcp-credentials.json"
+warn "Then set permissions: sudo chown ytd:ytd /opt/ytdl/gcp-credentials.json && sudo chmod 640 /opt/ytdl/gcp-credentials.json"
+warn "And restart services: sudo systemctl restart ytd-worker ytd-api ytd-beat"
+
+# ------------------------------------------------------------
+# Installation Complete
+# ------------------------------------------------------------
 echo ""
-echo "  Useful commands:"
-echo "    sudo systemctl status ${SERVICE_PREFIX}-api"
-echo "    sudo systemctl restart ${SERVICE_PREFIX}-api ${SERVICE_PREFIX}-worker ${SERVICE_PREFIX}-beat"
-echo "    sudo journalctl -u ${SERVICE_PREFIX}-api -f"
-echo "    sudo journalctl -u ${SERVICE_PREFIX}-worker -f"
+echo "============================================================"
+echo -e "${GREEN}  Installation Complete!${NC}"
+echo "============================================================"
+echo ""
+echo "Application Details:"
+echo "  - App Directory: $APP_DIR"
+echo "  - Domain: $DOMAIN_NAME"
+echo "  - API Port: 3001"
+if [ "$SETUP_SSL" == "y" ]; then
+    echo "  - SSL: Enabled (auto-renewal configured)"
+    echo "  - URL: https://$DOMAIN_NAME"
+else
+    echo "  - SSL: Not configured"
+    echo "  - URL: http://$DOMAIN_NAME"
+fi
+echo ""
+echo "IMPORTANT NEXT STEPS:"
+echo "  1. Upload GCP credentials:"
+echo "     scp your-credentials.json root@server:/opt/ytdl/gcp-credentials.json"
+echo "     sudo chown ytd:ytd /opt/ytdl/gcp-credentials.json"
+echo "     sudo chmod 640 /opt/ytdl/gcp-credentials.json"
+echo ""
+echo "  2. After uploading credentials, restart services:"
+echo "     sudo systemctl restart ytd-worker ytd-api ytd-beat"
+echo ""
+echo "  3. Verify GCS connection (optional):"
+echo "     cd /opt/ytdl && sudo bash -c 'source .env.production && $VENV_PATH/bin/python -c \"from google.cloud import storage; client = storage.Client(); print(\\\"GCS Connected!\\\")\"'"
+echo ""
+echo "Useful Commands:"
+echo "  - View API logs:    sudo journalctl -u ytd-api -f"
+echo "  - View worker logs: sudo journalctl -u ytd-worker -f"
+echo "  - View beat logs:   sudo journalctl -u ytd-beat -f"
+echo "  - Restart services: sudo systemctl restart ytd-worker ytd-api ytd-beat"
+echo "  - Check status:     sudo systemctl status ytd-worker ytd-api ytd-beat"
+echo "  - Update code:      cd /opt/ytdl && git pull && sudo systemctl restart ytd-worker ytd-api ytd-beat"
+echo ""
+if [ -z "$PROXY_URL" ]; then
+    warn "NO PROXY CONFIGURED: YouTube Shorts may be blocked on cloud server IPs"
+    echo "  To add a proxy later, edit /opt/ytdl/.env.production and add:"
+    echo "  YT_DLP_PROXY=socks5://user:pass@host:port"
+    echo "  Then restart: sudo systemctl restart ytd-worker ytd-api"
+    echo ""
+fi
+echo "============================================================"
 echo ""
