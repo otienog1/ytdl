@@ -34,14 +34,15 @@ class YouTubeService:
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-            # Use mobile player clients (works best without cookies)
-            # Android client is most reliable for bypassing bot detection
-            cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
-
-            # Add cookies only if proxy is not available (cookies + web client has JS challenges)
-            # if self.cookies_file and os.path.exists(self.cookies_file) and not self.proxy:
-            #     cmd.extend(['--cookies', self.cookies_file])
-            #     cmd.extend(['--extractor-args', 'youtube:js_runtime=nodejs'])
+            # Use cookies if available (requires web client)
+            if self.cookies_file and os.path.exists(self.cookies_file):
+                cmd.extend(['--cookies', self.cookies_file])
+                # Use web client with cookies (mobile clients don't support cookies)
+                cmd.extend(['--extractor-args', 'youtube:player_client=web'])
+            else:
+                # Use mobile player clients (works best without cookies)
+                # Android client is most reliable for bypassing bot detection
+                cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
 
             # Add proxy if configured (helps bypass IP-based blocking on cloud servers)
             if self.proxy:
@@ -93,14 +94,15 @@ class YouTubeService:
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-            # Use mobile player clients (works best without cookies)
-            # Android client is most reliable for bypassing bot detection
-            cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
-
-            # Add cookies only if proxy is not available (cookies + web client has JS challenges)
-            # if self.cookies_file and os.path.exists(self.cookies_file) and not self.proxy:
-            #     cmd.extend(['--cookies', self.cookies_file])
-            #     cmd.extend(['--extractor-args', 'youtube:js_runtime=nodejs'])
+            # Use cookies if available (requires web client)
+            if self.cookies_file and os.path.exists(self.cookies_file):
+                cmd.extend(['--cookies', self.cookies_file])
+                # Use web client with cookies (mobile clients don't support cookies)
+                cmd.extend(['--extractor-args', 'youtube:player_client=web'])
+            else:
+                # Use mobile player clients (works best without cookies)
+                # Android client is most reliable for bypassing bot detection
+                cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
 
             # Add proxy if configured (helps bypass IP-based blocking on cloud servers)
             if self.proxy:
