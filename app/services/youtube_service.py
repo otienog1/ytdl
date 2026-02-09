@@ -22,6 +22,9 @@ class YouTubeService:
         # Optional cookies file for YouTube authentication (to avoid bot detection)
         self.cookies_file = os.getenv('YT_DLP_COOKIES_FILE')
 
+        # Optional proxy (helps bypass IP-based bot detection on cloud servers)
+        self.proxy = os.getenv('YT_DLP_PROXY')
+
     async def get_video_info(self, url: str) -> VideoInfo:
         """Get video information using yt-dlp"""
         try:
@@ -31,8 +34,12 @@ class YouTubeService:
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-            # Use Node.js as JavaScript runtime (avoids "No supported JavaScript runtime" warning)
-            cmd.extend(['--extractor-args', 'youtube:player_client=android'])
+            # Use multiple player clients as fallback (helps bypass bot detection)
+            cmd.extend(['--extractor-args', 'youtube:player_client=ios,tv_embedded,android'])
+
+            # Add proxy if configured (helps bypass IP-based blocking on cloud servers)
+            if self.proxy:
+                cmd.extend(['--proxy', self.proxy])
 
             # Add cookies if available (helps avoid bot detection)
             if self.cookies_file and os.path.exists(self.cookies_file):
@@ -84,8 +91,12 @@ class YouTubeService:
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-            # Use Android player client (avoids bot detection better than web client)
-            cmd.extend(['--extractor-args', 'youtube:player_client=android'])
+            # Use multiple player clients as fallback (helps bypass bot detection)
+            cmd.extend(['--extractor-args', 'youtube:player_client=ios,tv_embedded,android'])
+
+            # Add proxy if configured (helps bypass IP-based blocking on cloud servers)
+            if self.proxy:
+                cmd.extend(['--proxy', self.proxy])
 
             # Add cookies if available
             if self.cookies_file and os.path.exists(self.cookies_file):
