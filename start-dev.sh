@@ -59,6 +59,17 @@ apt-get install -y -qq \
     curl wget git \
     build-essential \
     libssl-dev libffi-dev python3-dev
+
+# Install Node.js (required for yt-dlp JavaScript runtime)
+if ! command -v node &>/dev/null; then
+    info "Installing Node.js for yt-dlp JavaScript runtime..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y -qq nodejs
+    log "Node.js installed: $(node --version)"
+else
+    log "Node.js already installed: $(node --version)"
+fi
+
 log "System dependencies installed"
 
 # ------------------------------------------------------------

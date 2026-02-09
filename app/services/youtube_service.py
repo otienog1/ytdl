@@ -19,6 +19,9 @@ class YouTubeService:
         self.ffmpeg_path = os.getenv('FFMPEG_PATH', 'ffmpeg')
         self.ffprobe_path = os.getenv('FFPROBE_PATH', 'ffprobe')
 
+        # Optional cookies file for YouTube authentication (to avoid bot detection)
+        self.cookies_file = os.getenv('YT_DLP_COOKIES_FILE')
+
     async def get_video_info(self, url: str) -> VideoInfo:
         """Get video information using yt-dlp"""
         try:
@@ -27,6 +30,13 @@ class YouTubeService:
             # Add ffmpeg location if using local binary
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
+
+            # Use Node.js as JavaScript runtime (avoids "No supported JavaScript runtime" warning)
+            cmd.extend(['--extractor-args', 'youtube:player_client=android'])
+
+            # Add cookies if available (helps avoid bot detection)
+            if self.cookies_file and os.path.exists(self.cookies_file):
+                cmd.extend(['--cookies', self.cookies_file])
 
             result = subprocess.run(
                 cmd,
@@ -73,6 +83,13 @@ class YouTubeService:
             # Add ffmpeg location if using local binary
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
+
+            # Use Android player client (avoids bot detection better than web client)
+            cmd.extend(['--extractor-args', 'youtube:player_client=android'])
+
+            # Add cookies if available
+            if self.cookies_file and os.path.exists(self.cookies_file):
+                cmd.extend(['--cookies', self.cookies_file])
 
             # Download with real-time progress tracking
             process = subprocess.Popen(
