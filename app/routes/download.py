@@ -18,6 +18,7 @@ async def initiate_download(request: Request, download_request: DownloadRequest)
     try:
         url = str(download_request.url)
         job_id = str(uuid.uuid4())
+        cookies = download_request.cookies  # Optional cookies from frontend
 
         # Create download record
         db = get_database()
@@ -32,10 +33,10 @@ async def initiate_download(request: Request, download_request: DownloadRequest)
 
         await db.downloads.insert_one(download_doc)
 
-        # Enqueue task
-        process_download.delay(url, job_id)
+        # Enqueue task with optional cookies
+        process_download.delay(url, job_id, cookies)
 
-        logger.info(f"Download initiated: {job_id} for URL: {url}")
+        logger.info(f"Download initiated: {job_id} for URL: {url} (cookies: {'yes' if cookies else 'no'})")
 
         return DownloadResponse(
             jobId=job_id,

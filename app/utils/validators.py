@@ -1,5 +1,6 @@
 import re
 from pydantic import BaseModel, HttpUrl, field_validator
+from typing import Optional, Dict
 
 
 YOUTUBE_SHORTS_PATTERNS = [
@@ -10,6 +11,7 @@ YOUTUBE_SHORTS_PATTERNS = [
 
 class DownloadRequest(BaseModel):
     url: HttpUrl
+    cookies: Optional[Dict[str, str]] = None  # Optional YouTube cookies from frontend
 
     @field_validator('url')
     @classmethod

@@ -14,7 +14,7 @@ _db = None
 
 
 @celery_app.task(bind=True, max_retries=3)
-def process_download(self, url: str, job_id: str):
+def process_download(self, url: str, job_id: str, cookies: dict = None):
     """Process video download task"""
     try:
         # Run async functions in sync context
@@ -23,7 +23,7 @@ def process_download(self, url: str, job_id: str):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
-        return loop.run_until_complete(_process_download_async(self, url, job_id))
+        return loop.run_until_complete(_process_download_async(self, url, job_id, cookies))
     except Exception as e:
         logger.error(f"Download job failed: {job_id} - {str(e)}")
         # Update status to failed
@@ -32,7 +32,7 @@ def process_download(self, url: str, job_id: str):
         raise
 
 
-async def _process_download_async(task, url: str, job_id: str):
+async def _process_download_async(task, url: str, job_id: str, cookies: dict = None):
     """Async download processing"""
     try:
         logger.info(f"Processing download job: {job_id}")
@@ -47,7 +47,7 @@ async def _process_download_async(task, url: str, job_id: str):
             raise Exception("Invalid video URL")
 
         logger.info(f"Fetching video info for: {video_id}")
-        video_info = await youtube_service.get_video_info(url)
+        video_info = await youtube_service.get_video_info(url, cookies=cookies)
 
         await _update_status(
             job_id,
@@ -112,7 +112,8 @@ async def _process_download_async(task, url: str, job_id: str):
                 youtube_service.download_video_sync,
                 url,
                 video_id,
-                progress_callback
+                progress_callback,
+                cookies
             )
 
             # Poll progress while download is running
