@@ -1,0 +1,21 @@
+{
+  "name": "ytd-cookie-extractor",
+  "version": "1.0.0",
+  "description": "YouTube cookie extractor using Puppeteer for yt-dlp authentication",
+  "main": "extract-youtube-cookies.js",
+  "scripts": {
+    "extract-cookies": "node extract-youtube-cookies.js",
+    "install-chromium": "node -e \"require('puppeteer').executablePath()\" || echo 'Installing Chromium...' && npm install"
+  },
+  "keywords": [
+    "youtube",
+    "cookies",
+    "puppeteer",
+    "yt-dlp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer": "^21.11.0"
+  }
+}
