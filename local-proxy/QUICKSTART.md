@@ -12,7 +12,7 @@ npm install
 ## 2. Start the Proxy
 
 ```bash
-node simple-proxy.js --port 1080 --auth myuser:mypass123
+node simple-proxy.js --port 1080 --auth ytd_user:ytdlPass@123
 ```
 
 Replace `myuser:mypass123` with your own credentials.
@@ -59,6 +59,7 @@ YT_DLP_PROXY=socks5://myuser:mypass123@YOUR_PUBLIC_IP:1080
 ```
 
 Example:
+
 ```bash
 YT_DLP_PROXY=socks5://myuser:mypass123@203.0.113.45:1080
 ```
@@ -78,16 +79,19 @@ Check proxy terminal for connection logs.
 ## Troubleshooting
 
 **"Connection refused"**:
+
 - Check port forwarding is correct
 - Verify proxy is running
 - Test locally: `curl --proxy socks5://127.0.0.1:1080 https://youtube.com`
 
 **"Still getting bot detection"**:
+
 - Wait 5-10 minutes after configuring
 - Check backend logs: `sudo journalctl -u ytd-worker -f`
 - Verify proxy URL in .env.production is correct
 
 **"Address already in use"**:
+
 - Use different port: `node simple-proxy.js --port 1081 --auth user:pass`
 - Update backend .env.production to match
 
@@ -103,6 +107,7 @@ pm2 startup  # Follow instructions
 ```
 
 View logs:
+
 ```bash
 pm2 logs ytd-proxy
 ```

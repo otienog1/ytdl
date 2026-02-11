@@ -110,23 +110,45 @@ async function extractCookies() {
   try {
     // Launch browser
     log('Launching browser...', colors.yellow);
-    browser = await puppeteer.launch({
+
+    // Try to find Chrome executable path
+    const getChromePath = () => {
+      const platform = process.platform;
+      if (platform === 'win32') {
+        return 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
+      } else if (platform === 'darwin') {
+        return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+      } else {
+        return '/usr/bin/google-chrome';
+      }
+    };
+
+    const launchOptions = {
       headless: false, // Show browser so user can log in
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu',
         '--disable-blink-features=AutomationControlled', // Hide automation
         '--disable-features=IsolateOrigins,site-per-process',
-        '--flag-switches-begin --disable-site-isolation-trials --flag-switches-end',
       ],
       ignoreDefaultArgs: ['--enable-automation'], // Remove automation flag
       defaultViewport: {
         width: 1280,
         height: 800,
       },
-    });
+    };
+
+    // Try to use system Chrome first (has latest features)
+    const chromePath = getChromePath();
+    if (fs.existsSync(chromePath)) {
+      launchOptions.executablePath = chromePath;
+      log(`Using system Chrome: ${chromePath}`, colors.cyan);
+    } else {
+      log('Using bundled Chromium (system Chrome not found)', colors.yellow);
+    }
+
+    browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
 

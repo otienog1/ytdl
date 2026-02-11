@@ -178,6 +178,23 @@ ssh user@server "chmod 600 /opt/app/youtube_cookies.txt"
 - Wait for the homepage to fully load
 - Then press ENTER in terminal
 
+### "This browser or app may not be secure" (Google Login)
+
+**Cause**: Google detects automated browser / outdated Chromium
+
+**Solution**: The script now automatically uses your system's Chrome browser (which is more up-to-date). Make sure you have Chrome installed:
+- **Windows**: Install from https://www.google.com/chrome/
+- **Mac**: Install from https://www.google.com/chrome/
+- **Linux**: `sudo apt-get install google-chrome-stable`
+
+The script will automatically detect and use it.
+
+**Alternative**: If you still get blocked, you can manually extract cookies using a browser extension:
+1. Install "Get cookies.txt LOCALLY" extension for Chrome/Edge
+2. Go to YouTube and log in
+3. Click the extension icon → Export cookies
+4. Save as `youtube_cookies.txt`
+
 ### "Chromium revision is not downloaded"
 
 **Cause**: Puppeteer's Chromium wasn't installed
@@ -232,13 +249,15 @@ xvfb-run -a node extract-youtube-cookies.js
 
 ## How It Works
 
-1. **Launches Puppeteer** - Opens a real Chrome browser
+1. **Launches Chrome** - Uses your system Chrome (latest version) if available, or bundled Chromium
 2. **Navigates to YouTube** - Goes to https://www.youtube.com
 3. **Waits for login** - You manually log in
 4. **Extracts cookies** - Gets all cookies from the browser
 5. **Filters YouTube cookies** - Only keeps youtube.com and google.com cookies
 6. **Converts format** - Converts to Netscape format (yt-dlp standard)
 7. **Saves to file** - Writes to youtube_cookies.txt
+
+**Note:** The script automatically uses your system's installed Chrome browser (which has the latest features and is less likely to be flagged by Google) if available. If not found, it falls back to Puppeteer's bundled Chromium.
 
 ## Cookie Format
 
