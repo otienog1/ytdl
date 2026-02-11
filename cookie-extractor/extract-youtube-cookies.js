@@ -111,7 +111,7 @@ async function extractCookies() {
     // Launch browser
     log('Launching browser...', colors.yellow);
 
-    // Try to find Chrome executable path and user data directory
+    // Try to find Chrome executable path
     const getChromePath = () => {
       const platform = process.platform;
       if (platform === 'win32') {
@@ -120,18 +120,6 @@ async function extractCookies() {
         return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
       } else {
         return '/usr/bin/google-chrome';
-      }
-    };
-
-    const getUserDataDir = () => {
-      const platform = process.platform;
-      const homeDir = process.env.USERPROFILE || process.env.HOME;
-      if (platform === 'win32') {
-        return path.join(homeDir, 'AppData', 'Local', 'Google', 'Chrome', 'User Data');
-      } else if (platform === 'darwin') {
-        return path.join(homeDir, 'Library', 'Application Support', 'Google', 'Chrome');
-      } else {
-        return path.join(homeDir, '.config', 'google-chrome');
       }
     };
 
@@ -148,22 +136,13 @@ async function extractCookies() {
       defaultViewport: null, // Use full window
     };
 
-    // Try to use system Chrome with user profile (already logged in!)
+    // Try to use system Chrome
     const chromePath = getChromePath();
-    const userDataDir = getUserDataDir();
 
     if (fs.existsSync(chromePath)) {
       launchOptions.executablePath = chromePath;
-
-      // Use existing Chrome profile so user is already logged in
-      if (fs.existsSync(userDataDir)) {
-        launchOptions.userDataDir = userDataDir;
-        log(`Using system Chrome with your profile`, colors.cyan);
-        log(`Profile: ${userDataDir}`, colors.blue);
-        log(`${colors.yellow}Note: You should already be logged into YouTube!${colors.reset}`, colors.yellow);
-      } else {
-        log(`Using system Chrome: ${chromePath}`, colors.cyan);
-      }
+      log(`Using system Chrome: ${chromePath}`, colors.cyan);
+      log(`${colors.yellow}Note: Please close all Chrome windows first if you get an error!${colors.reset}`, colors.yellow);
     } else {
       log('Using bundled Chromium (system Chrome not found)', colors.yellow);
     }
@@ -213,19 +192,16 @@ async function extractCookies() {
     await page.goto(YOUTUBE_URL, { waitUntil: 'networkidle2' });
 
     log('\n' + '='.repeat(70), colors.green);
-    log(`${colors.bold}  ACTION REQUIRED${colors.reset}`, colors.green);
+    log(`${colors.bold}  ACTION REQUIRED: Please log in to YouTube${colors.reset}`, colors.green);
     log('='.repeat(70), colors.green);
-    log('\nA browser window has opened.', colors.yellow);
-    log('\nIf you\'re already logged into YouTube:', colors.bold);
-    log('  ✓ Just verify you see your account icon in the top right', colors.green);
-    log('  ✓ Then press ENTER below to extract cookies\n', colors.green);
-    log('If you\'re NOT logged in:', colors.bold);
-    log('  1. Click "Sign In" button in the top right corner', colors.yellow);
-    log('  2. Log in with your Google account', colors.yellow);
-    log('  3. Wait for YouTube homepage to fully load', colors.yellow);
-    log('  4. Then press ENTER below\n', colors.yellow);
+    log('\nSteps:', colors.bold);
+    log('  1. A browser window has opened showing YouTube', colors.yellow);
+    log('  2. Click "Sign In" button in the top right corner', colors.yellow);
+    log('  3. Log in with your Google account credentials', colors.yellow);
+    log('  4. Wait for YouTube homepage to fully load', colors.yellow);
+    log('  5. Return here and press ENTER to continue\n', colors.yellow);
 
-    log(`${colors.cyan}Tip: Using your Chrome profile means you should already be logged in!${colors.reset}\n`);
+    log(`${colors.cyan}Tip: Make sure you're fully logged in before pressing ENTER${colors.reset}\n`);
 
     // Wait for user input
     await new Promise((resolve) => {
