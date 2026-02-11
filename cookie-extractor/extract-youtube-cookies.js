@@ -117,7 +117,11 @@ async function extractCookies() {
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
+        '--disable-blink-features=AutomationControlled', // Hide automation
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--flag-switches-begin --disable-site-isolation-trials --flag-switches-end',
       ],
+      ignoreDefaultArgs: ['--enable-automation'], // Remove automation flag
       defaultViewport: {
         width: 1280,
         height: 800,
@@ -125,6 +129,42 @@ async function extractCookies() {
     });
 
     const page = await browser.newPage();
+
+    // Hide webdriver property and make browser look more legitimate
+    await page.evaluateOnNewDocument(() => {
+      // Remove webdriver property
+      Object.defineProperty(navigator, 'webdriver', {
+        get: () => false,
+      });
+
+      // Mock plugins to avoid detection
+      Object.defineProperty(navigator, 'plugins', {
+        get: () => [1, 2, 3, 4, 5],
+      });
+
+      // Mock languages
+      Object.defineProperty(navigator, 'languages', {
+        get: () => ['en-US', 'en'],
+      });
+
+      // Override chrome property
+      window.chrome = {
+        runtime: {},
+      };
+
+      // Override permissions
+      const originalQuery = window.navigator.permissions.query;
+      window.navigator.permissions.query = (parameters) => (
+        parameters.name === 'notifications' ?
+          Promise.resolve({ state: Notification.permission }) :
+          originalQuery(parameters)
+      );
+    });
+
+    // Set a realistic user agent
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    );
 
     // Navigate to YouTube
     log(`Navigating to ${YOUTUBE_URL}...`, colors.yellow);
