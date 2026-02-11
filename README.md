@@ -132,7 +132,7 @@ ytd/
     └── README.md        # Full documentation
 ```
 
-## Important: Why You Need the Local Proxy
+## Important: Bypassing YouTube Bot Detection
 
 YouTube **blocks datacenter/cloud server IPs** from downloading Shorts videos. You'll see errors like:
 
@@ -140,24 +140,46 @@ YouTube **blocks datacenter/cloud server IPs** from downloading Shorts videos. Y
 Sign in to confirm you're not a bot
 ```
 
-The **local-proxy** solves this by routing requests through your home internet connection (residential IP), which YouTube allows.
+**You have TWO solutions:**
 
-**The proxy is REQUIRED unless:**
-- You only download regular videos (not Shorts)
-- You use a paid residential proxy service
-- Your cloud server has a residential IP (very rare)
+### Option 1: Cookie Authentication ⭐ RECOMMENDED
+
+Use the **standalone cookie extractor** to extract your YouTube cookies:
+
+1. Run cookie extractor on your computer
+2. Upload cookies to server
+3. yt-dlp uses your cookies for authentication
+
+**Pros:** Simple, no port forwarding, no network issues
+**Cons:** Cookies expire every 30-90 days (just re-run the tool)
+
+[→ Cookie Extractor Quick Start](cookie-extractor/QUICKSTART.md)
+
+### Option 2: Residential Proxy
+
+Use the **local proxy** to route requests through your home internet:
+
+1. Run proxy on your home computer
+2. Configure router port forwarding
+3. Server connects through your residential IP
+
+**Pros:** Longer lasting solution
+**Cons:** Requires port forwarding, network configuration, may be blocked by ISP
+
+[→ Local Proxy Quick Start](local-proxy/QUICKSTART.md)
 
 ## Common Issues & Solutions
 
 ### "Bot detection" / "Sign in to confirm"
-**Solution**: Setup the local proxy → [local-proxy/QUICKSTART.md](local-proxy/QUICKSTART.md)
+**Solution 1 (Easier)**: Use cookie extractor → [cookie-extractor/QUICKSTART.md](cookie-extractor/QUICKSTART.md)
+**Solution 2 (Advanced)**: Setup local proxy → [local-proxy/QUICKSTART.md](local-proxy/QUICKSTART.md)
 
 ### "Connection refused" from backend to proxy
 **Causes**: Proxy not running, port forwarding not configured, wrong IP/credentials
-**Solution**: See [local-proxy/README.md#troubleshooting](local-proxy/README.md#troubleshooting)
+**Solution**: Switch to cookie authentication or see [local-proxy/README.md#troubleshooting](local-proxy/README.md#troubleshooting)
 
-### "No cookies found" in browser console
-**Note**: This is expected and normal. YouTube cookies are HttpOnly and can't be accessed by JavaScript. This doesn't affect functionality - the proxy handles authentication.
+### Cookies expire
+**Solution**: Re-run cookie extractor (takes 2 minutes)
 
 ## Documentation
 
@@ -170,8 +192,12 @@ Each component has detailed setup instructions:
 - [Backend README](backend-python/README.md) - Python/FastAPI setup
 - [Deployment Guide](backend-python/DEPLOYMENT.md) - Production deployment
 
-### Local Proxy ⭐
-- [Proxy Quick Start](local-proxy/QUICKSTART.md) - Get running in 5 minutes
+### Cookie Extractor ⭐ RECOMMENDED
+- [Cookie Extractor Quick Start](cookie-extractor/QUICKSTART.md) - 3-minute setup
+- [Cookie Extractor README](cookie-extractor/README.md) - Full documentation
+
+### Local Proxy (Alternative)
+- [Proxy Quick Start](local-proxy/QUICKSTART.md) - 5-minute setup
 - [Proxy README](local-proxy/README.md) - Complete documentation
 
 ### General
