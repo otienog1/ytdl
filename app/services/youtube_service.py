@@ -55,6 +55,10 @@ class YouTubeService:
         try:
             cmd = [self.yt_dlp_path, '--dump-json', '--no-playlist', url]
 
+            # Enable Node.js runtime and remote EJS solver (required for 2026 YouTube)
+            cmd.extend(["--js-runtimes", "node"])
+            cmd.extend(["--remote-components", "ejs:github"])
+
             # Add ffmpeg location if using local binary
             if self.ffmpeg_path != 'ffmpeg':
                 cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
@@ -71,13 +75,12 @@ class YouTubeService:
                 # Fall back to server-side cookies file
                 use_cookies_file = self.cookies_file
 
+            # Always use cookies if available (prevents bot detection)
             if use_cookies_file:
                 cmd.extend(['--cookies', use_cookies_file])
-                # Use web client with cookies (mobile clients don't support cookies)
-                cmd.extend(['--extractor-args', 'youtube:player_client=web'])
+                # Let yt-dlp auto-select best client when authenticated
             else:
-                # Use mobile player clients (works best without cookies)
-                # Android client is most reliable for bypassing bot detection
+                # Without cookies, use mobile clients
                 cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
 
             # Add proxy if configured (helps bypass IP-based blocking on cloud servers)
