@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW_MS: Optional[int] = None  # Legacy Node.js format (milliseconds)
 
     # File Cleanup
-    FILE_EXPIRY_HOURS: int = 24
+    FILE_EXPIRY_HOURS: int = 1  # Delete files 1 hour after download
 
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"

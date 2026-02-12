@@ -24,7 +24,7 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     'cleanup-old-downloads': {
         'task': 'app.queue.cleanup_tasks.cleanup_old_downloads',
-        'schedule': crontab(hour='*/6'),  # Run every 6 hours
+        'schedule': crontab(minute='*/30'),  # Run every 30 minutes (for 1-hour expiry)
     },
     'cleanup-failed-downloads': {
         'task': 'app.queue.cleanup_tasks.cleanup_failed_downloads',
