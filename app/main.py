@@ -9,7 +9,7 @@ from app.config.settings import settings
 from app.config.database import connect_to_mongo, close_mongo_connection
 from app.config.redis_client import redis_client
 from app.middleware.rate_limit import limiter, _rate_limit_exceeded_handler
-from app.routes import download, status, history
+from app.routes import download, status, history, storage_routes
 from app.utils.logger import logger
 
 
@@ -66,6 +66,7 @@ async def health_check():
 app.include_router(download.router, prefix="/api/download", tags=["download"])
 app.include_router(status.router, prefix="/api/status", tags=["status"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])
+app.include_router(storage_routes.router)
 
 
 # Error handlers

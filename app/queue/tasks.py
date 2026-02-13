@@ -74,14 +74,20 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
             file_name = _extract_filename_from_url(old_url)
 
             if file_name:
+                # Get provider from existing download (default to gcs for old records)
+                provider = existing_download.get('storageProvider', 'gcs')
                 # Regenerate signed URL with proper Content-Disposition header
                 # This ensures downloads work even for old files
-                download_url = await storage_service.regenerate_signed_url(file_name)
-                logger.info(f"Regenerated signed URL for deduplicated video: {file_name}")
+                download_url = await storage_service.regenerate_signed_url(file_name, provider)
+                logger.info(f"Regenerated signed URL for deduplicated video: {file_name} from {provider}")
             else:
                 # Fallback to old URL if extraction fails
                 download_url = old_url
                 logger.warning(f"Could not extract filename from URL, using old URL")
+
+            # Get file size and provider from existing download for reuse
+            storage_provider = existing_download.get('storageProvider', 'gcs')
+            file_size = existing_download.get('fileSize', 0)
 
             # Update current job with existing data
             await _update_status(job_id, 'processing', progress=90)
@@ -145,7 +151,9 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
             safe_title = "".join(c for c in video_info.title if c.isalnum() or c in (' ', '-', '_')).strip()
             safe_title = safe_title[:100]  # Limit length
             destination_filename = f"{safe_title}.mp4" if safe_title else f"{video_id}.mp4"
-            download_url = await storage_service.upload_file(local_file_path, destination_filename)
+
+            # Upload to cloud storage (returns url, provider, file_size)
+            download_url, storage_provider, file_size = await storage_service.upload_file(local_file_path, destination_filename)
 
             await _update_status(job_id, 'processing', progress=98)
             task.update_state(state='PROGRESS', meta={'progress': 98})
@@ -160,7 +168,9 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
             'completed',
             progress=100,
             downloadUrl=download_url,
-            videoInfo=video_info_dict
+            videoInfo=video_info_dict,
+            storageProvider=storage_provider,
+            fileSize=file_size
         )
 
         logger.info(f"Download job completed: {job_id}")

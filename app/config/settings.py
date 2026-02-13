@@ -15,6 +15,27 @@ class Settings(BaseSettings):
     GCP_BUCKET_NAME: str
     GOOGLE_APPLICATION_CREDENTIALS: str
 
+    # Azure Blob Storage
+    AZURE_STORAGE_CONNECTION_STRING: Optional[str] = None
+    AZURE_CONTAINER_NAME: Optional[str] = None
+
+    # AWS S3
+    AWS_ACCESS_KEY_ID: Optional[str] = None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = None
+    AWS_S3_BUCKET_NAME: Optional[str] = None
+    AWS_REGION: Optional[str] = "us-east-1"
+
+    # Email (Mailgun SMTP)
+    MAILGUN_SMTP_HOST: str = "smtp.mailgun.org"
+    MAILGUN_SMTP_PORT: int = 587
+    MAILGUN_SMTP_USER: Optional[str] = None
+    MAILGUN_SMTP_PASSWORD: Optional[str] = None
+    ALERT_EMAIL_FROM: Optional[str] = None
+    ALERT_EMAIL_TO: Optional[str] = None
+
+    # Storage limits (in bytes)
+    STORAGE_LIMIT_BYTES: int = 5 * 1024 * 1024 * 1024  # 5GB
+
     # Server
     PORT: int = 3001
     ENVIRONMENT: str = "development"

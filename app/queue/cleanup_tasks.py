@@ -119,10 +119,13 @@ async def _cleanup_old_downloads_async():
                     file_name = _extract_filename_from_url(download_url)
 
                     if file_name:
-                        # Delete from GCS
-                        await storage_service.delete_file(file_name)
+                        # Get provider from download record (default to gcs for old records)
+                        provider = download.get('storageProvider', 'gcs')
+
+                        # Delete from cloud storage
+                        await storage_service.delete_file(file_name, provider)
                         files_deleted += 1
-                        logger.info(f"Deleted file: {file_name} (video: {video_id})")
+                        logger.info(f"Deleted file: {file_name} from {provider} (video: {video_id})")
 
                     # Mark download as expired and remove URL
                     await db.downloads.update_one(
