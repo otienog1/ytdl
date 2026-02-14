@@ -52,8 +52,7 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
         await _update_status(
             job_id,
             'processing',
-            progress=10,
-            video_info=video_info.model_dump(by_alias=True)
+            progress=10
         )
         task.update_state(state='PROGRESS', meta={'progress': 10})
 
