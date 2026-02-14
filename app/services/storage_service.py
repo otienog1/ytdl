@@ -107,6 +107,8 @@ class MultiStorageService:
 
     async def _upload_to_azure(self, local_file_path: str, file_name: str) -> str:
         """Upload file to Azure Blob Storage"""
+        from azure.storage.blob import ContentSettings
+
         container_client = multi_storage.get_azure_container_client()
         if not container_client:
             raise Exception("Azure not configured")
@@ -116,7 +118,7 @@ class MultiStorageService:
         with open(local_file_path, "rb") as data:
             blob_client.upload_blob(
                 data,
-                content_settings={"content_type": "video/mp4"},
+                content_settings=ContentSettings(content_type="video/mp4"),
                 overwrite=True
             )
 
