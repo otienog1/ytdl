@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     # File Cleanup
     FILE_EXPIRY_HOURS: int = 1  # Delete files 1 hour after download
 
+    # Timeouts (in seconds)
+    YTDLP_INFO_TIMEOUT: int = 60  # seconds
+    YTDLP_DOWNLOAD_TIMEOUT: int = 300  # 5 minutes
+    STORAGE_UPLOAD_TIMEOUT: int = 180  # 3 minutes
+
     # Celery
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"

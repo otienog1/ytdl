@@ -9,6 +9,12 @@ from pathlib import Path
 from typing import Dict, Optional
 from app.utils.logger import logger
 from app.models.download import VideoInfo
+from app.config.settings import settings
+from app.exceptions import (
+    InvalidVideoURLError,
+    VideoNotFoundError,
+    VideoDownloadError
+)
 
 
 class YouTubeService:
@@ -29,6 +35,21 @@ class YouTubeService:
         # Optional proxy (helps bypass IP-based bot detection on cloud servers)
         self.proxy = os.getenv('YT_DLP_PROXY')
 
+    def _extract_video_id(self, url: str) -> str:
+        """Extract video ID from YouTube URL"""
+        patterns = [
+            r'(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
+            r'youtube\.com\/embed\/([a-zA-Z0-9_-]{11})',
+            r'youtube\.com\/v\/([a-zA-Z0-9_-]{11})'
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+
+        raise InvalidVideoURLError(url)
+
     def _create_temp_cookies_file(self, cookies: Dict[str, str]) -> str:
         """Create temporary cookies file in Netscape format from dict"""
         try:
@@ -46,7 +67,9 @@ class YouTubeService:
 
     async def get_video_info(self, url: str, cookies: Optional[Dict[str, str]] = None) -> VideoInfo:
         """Get video information using yt-dlp"""
+        video_id = self._extract_video_id(url)
         temp_cookies_file = None
+
         try:
             cmd = [self.yt_dlp_path, '--dump-json', '--no-playlist', url]
 
@@ -62,7 +85,7 @@ class YouTubeService:
                 use_cookies_file = self.cookies_file
             elif cookies:
                 temp_cookies_file = self._create_temp_cookies_file(cookies)
-            
+
             if temp_cookies_file:
                 use_cookies_file = temp_cookies_file
 
@@ -74,7 +97,29 @@ class YouTubeService:
             if self.proxy:
                 cmd.extend(['--proxy', self.proxy])
 
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=settings.YTDLP_INFO_TIMEOUT
+            )
+
+            if result.returncode != 0:
+                stderr = result.stderr if result.stderr else ""
+
+                # Parse yt-dlp errors
+                if "Video unavailable" in stderr:
+                    raise VideoNotFoundError(video_id, "Video is unavailable")
+                elif "Private video" in stderr:
+                    raise VideoNotFoundError(video_id, "Video is private")
+                elif "This video is no longer available" in stderr:
+                    raise VideoNotFoundError(video_id, "Video has been removed")
+                elif "video doesn't exist" in stderr.lower():
+                    raise VideoNotFoundError(video_id, "Video does not exist")
+                else:
+                    raise VideoDownloadError(video_id, stderr)
+
             info = json.loads(result.stdout)
 
             return VideoInfo(
@@ -85,9 +130,18 @@ class YouTubeService:
                 quality=f"{info.get('height', 'N/A')}p" if info.get('height') else None,
                 file_size=self._format_file_size(info.get('filesize')) if info.get('filesize') else None
             )
+
+        except subprocess.TimeoutExpired:
+            raise VideoDownloadError(video_id, f"Request timed out after {settings.YTDLP_INFO_TIMEOUT} seconds")
+        except FileNotFoundError:
+            raise VideoDownloadError(video_id, "yt-dlp binary not found")
+        except json.JSONDecodeError as e:
+            raise VideoDownloadError(video_id, f"Invalid JSON response from yt-dlp: {str(e)}")
+        except (InvalidVideoURLError, VideoNotFoundError, VideoDownloadError):
+            raise
         except Exception as e:
             logger.error(f"Error fetching video info: {e}")
-            raise Exception("Failed to fetch video information")
+            raise VideoDownloadError(video_id, str(e))
         finally:
             if temp_cookies_file and os.path.exists(temp_cookies_file):
                 os.remove(temp_cookies_file)
@@ -101,8 +155,8 @@ class YouTubeService:
 
             cmd = [
                 self.yt_dlp_path,
-                '--js-runtimes', 'node',          # FIX: Explicitly use Node
-                '--remote-components', 'ejs:github', # FIX: Use latest challenge solver
+                '--js-runtimes', 'node',
+                '--remote-components', 'ejs:github',
                 '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 '--merge-output-format', 'mp4',
                 '--newline',
@@ -118,7 +172,7 @@ class YouTubeService:
                 use_cookies_file = self.cookies_file
             elif cookies:
                 temp_cookies_file = self._create_temp_cookies_file(cookies)
-            
+
             if temp_cookies_file:
                 use_cookies_file = temp_cookies_file
 
@@ -142,9 +196,12 @@ class YouTubeService:
 
             logger.info(f"Starting download for {video_id}")
             last_progress = 0
+            stderr_output = []
 
             for line in process.stdout:
                 line = line.strip()
+                stderr_output.append(line)
+
                 if progress_callback:
                     if '[download]' in line and '%' in line:
                         match = re.search(r'(\d+\.?\d*)%', line)
@@ -159,12 +216,20 @@ class YouTubeService:
 
             process.wait()
             if process.returncode != 0:
-                raise subprocess.CalledProcessError(process.returncode, cmd)
+                stderr = "\n".join(stderr_output)
+                raise VideoDownloadError(video_id, stderr)
 
             return str(output_path)
+
+        except subprocess.TimeoutExpired:
+            raise VideoDownloadError(video_id, f"Download timed out after {settings.YTDLP_DOWNLOAD_TIMEOUT} seconds")
+        except FileNotFoundError:
+            raise VideoDownloadError(video_id, "yt-dlp binary not found")
+        except VideoDownloadError:
+            raise
         except Exception as e:
             logger.error(f"Error downloading video: {e}")
-            raise Exception("Failed to download video")
+            raise VideoDownloadError(video_id, str(e))
         finally:
             if temp_cookies_file and os.path.exists(temp_cookies_file):
                 os.remove(temp_cookies_file)

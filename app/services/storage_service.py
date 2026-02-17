@@ -10,6 +10,11 @@ from typing import Tuple, Optional
 from app.config.multi_storage import multi_storage
 from app.services.storage_tracker import storage_tracker
 from app.utils.logger import logger
+from app.exceptions import (
+    StorageProviderNotAvailableError,
+    FileUploadError,
+    FileNotFoundError as StorageFileNotFoundError
+)
 
 
 class MultiStorageService:
@@ -18,17 +23,17 @@ class MultiStorageService:
     def __init__(self):
         pass
 
-    async def select_random_provider(self) -> Optional[str]:
+    async def select_random_provider(self) -> str:
         """
         Select a random storage provider that is under the storage limit.
-        Returns provider name ('gcs', 'azure', 's3') or None if all are full.
+        Returns provider name ('gcs', 'azure', 's3')
+        Raises StorageProviderNotAvailableError if all providers are full.
         """
         # Get providers that are available and under limit
         available_providers = await storage_tracker.get_available_providers_under_limit()
 
         if not available_providers:
-            logger.error("All storage providers are at capacity!")
-            return None
+            raise StorageProviderNotAvailableError()
 
         # Randomly select one
         selected = random.choice(available_providers)
@@ -42,10 +47,8 @@ class MultiStorageService:
         Returns:
             Tuple[url, provider, file_size]: Download URL, provider name, and file size in bytes
         """
-        # Select provider
+        # Select provider (raises StorageProviderNotAvailableError if none available)
         provider = await self.select_random_provider()
-        if not provider:
-            raise Exception("No storage providers available")
 
         # Get file size
         file_size = os.path.getsize(local_file_path)
@@ -61,7 +64,7 @@ class MultiStorageService:
         elif provider == "s3":
             url = await self._upload_to_s3(local_file_path, file_name)
         else:
-            raise Exception(f"Unknown provider: {provider}")
+            raise FileUploadError(provider, f"Unknown provider: {provider}")
 
         # Track storage usage
         await storage_tracker.add_file_usage(provider, file_size, file_name)
@@ -84,66 +87,76 @@ class MultiStorageService:
 
     async def _upload_to_gcs(self, local_file_path: str, file_name: str) -> str:
         """Upload file to Google Cloud Storage"""
-        bucket = multi_storage.get_gcs_bucket()
-        if not bucket:
-            raise Exception("GCS not configured")
+        try:
+            bucket = multi_storage.get_gcs_bucket()
+            if not bucket:
+                raise FileUploadError("gcs", "GCS not configured")
 
-        blob = bucket.blob(file_name)
-        blob.upload_from_filename(
-            local_file_path,
-            content_type='video/mp4',
-            timeout=300,
-            retry=None
-        )
+            blob = bucket.blob(file_name)
+            blob.upload_from_filename(
+                local_file_path,
+                content_type='video/mp4',
+                timeout=300,
+                retry=None
+            )
 
-        # Generate signed URL with download disposition (1 hour)
-        url = blob.generate_signed_url(
-            expiration=timedelta(hours=1),
-            method='GET',
-            response_disposition=f'attachment; filename="{file_name}"'
-        )
+            # Generate signed URL with download disposition (1 hour)
+            url = blob.generate_signed_url(
+                expiration=timedelta(hours=1),
+                method='GET',
+                response_disposition=f'attachment; filename="{file_name}"'
+            )
 
-        return url
+            return url
+        except FileUploadError:
+            raise
+        except Exception as e:
+            raise FileUploadError("gcs", str(e))
 
     async def _upload_to_azure(self, local_file_path: str, file_name: str) -> str:
         """Upload file to Azure Blob Storage"""
-        from azure.storage.blob import ContentSettings
+        try:
+            from azure.storage.blob import ContentSettings
 
-        container_client = multi_storage.get_azure_container_client()
-        if not container_client:
-            raise Exception("Azure not configured")
+            container_client = multi_storage.get_azure_container_client()
+            if not container_client:
+                raise FileUploadError("azure", "Azure not configured")
 
-        blob_client = container_client.get_blob_client(file_name)
+            blob_client = container_client.get_blob_client(file_name)
 
-        with open(local_file_path, "rb") as data:
-            blob_client.upload_blob(
-                data,
-                content_settings=ContentSettings(content_type="video/mp4"),
-                overwrite=True
+            with open(local_file_path, "rb") as data:
+                blob_client.upload_blob(
+                    data,
+                    content_settings=ContentSettings(content_type="video/mp4"),
+                    overwrite=True
+                )
+
+            # Generate SAS URL for download (1 hour)
+            from azure.storage.blob import generate_blob_sas, BlobSasPermissions
+            from datetime import datetime, timedelta
+
+            # Get connection info from container client
+            account_name = blob_client.account_name
+            container_name = container_client.container_name
+
+            # Generate SAS token
+            from app.config.settings import settings
+            sas_token = generate_blob_sas(
+                account_name=account_name,
+                container_name=container_name,
+                blob_name=file_name,
+                account_key=self._extract_azure_account_key(),
+                permission=BlobSasPermissions(read=True),
+                expiry=datetime.utcnow() + timedelta(hours=1),
+                content_disposition=f'attachment; filename="{file_name}"'
             )
 
-        # Generate SAS URL for download (1 hour)
-        from azure.storage.blob import generate_blob_sas, BlobSasPermissions
-        from datetime import datetime, timedelta
-
-        # Get connection info from container client
-        account_name = blob_client.account_name
-        container_name = container_client.container_name
-
-        # Generate SAS token
-        from app.config.settings import settings
-        sas_token = generate_blob_sas(
-            account_name=account_name,
-            container_name=container_name,
-            blob_name=file_name,
-            account_key=self._extract_azure_account_key(),
-            permission=BlobSasPermissions(read=True),
-            expiry=datetime.utcnow() + timedelta(hours=1),
-            content_disposition=f'attachment; filename="{file_name}"'
-        )
-
-        url = f"{blob_client.url}?{sas_token}"
-        return url
+            url = f"{blob_client.url}?{sas_token}"
+            return url
+        except FileUploadError:
+            raise
+        except Exception as e:
+            raise FileUploadError("azure", str(e))
 
     def _extract_azure_account_key(self) -> str:
         """Extract account key from Azure connection string"""
@@ -152,38 +165,43 @@ class MultiStorageService:
         for part in conn_str.split(';'):
             if part.startswith('AccountKey='):
                 return part.split('=', 1)[1]
-        raise Exception("Could not extract Azure account key")
+        raise FileUploadError("azure", "Could not extract Azure account key from connection string")
 
     async def _upload_to_s3(self, local_file_path: str, file_name: str) -> str:
         """Upload file to AWS S3"""
-        s3_client = multi_storage.get_s3_client()
-        bucket_name = multi_storage.get_s3_bucket_name()
-        if not s3_client or not bucket_name:
-            raise Exception("S3 not configured")
+        try:
+            s3_client = multi_storage.get_s3_client()
+            bucket_name = multi_storage.get_s3_bucket_name()
+            if not s3_client or not bucket_name:
+                raise FileUploadError("s3", "S3 not configured")
 
-        # Upload file
-        s3_client.upload_file(
-            local_file_path,
-            bucket_name,
-            file_name,
-            ExtraArgs={
-                'ContentType': 'video/mp4',
-                'ContentDisposition': f'attachment; filename="{file_name}"'
-            }
-        )
+            # Upload file
+            s3_client.upload_file(
+                local_file_path,
+                bucket_name,
+                file_name,
+                ExtraArgs={
+                    'ContentType': 'video/mp4',
+                    'ContentDisposition': f'attachment; filename="{file_name}"'
+                }
+            )
 
-        # Generate presigned URL (1 hour)
-        url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': bucket_name,
-                'Key': file_name,
-                'ResponseContentDisposition': f'attachment; filename="{file_name}"'
-            },
-            ExpiresIn=3600  # 1 hour
-        )
+            # Generate presigned URL (1 hour)
+            url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': bucket_name,
+                    'Key': file_name,
+                    'ResponseContentDisposition': f'attachment; filename="{file_name}"'
+                },
+                ExpiresIn=3600  # 1 hour
+            )
 
-        return url
+            return url
+        except FileUploadError:
+            raise
+        except Exception as e:
+            raise FileUploadError("s3", str(e))
 
     async def delete_file(self, file_name: str, provider: str):
         """Delete file from specified storage provider"""
@@ -199,16 +217,18 @@ class MultiStorageService:
             elif provider == "s3":
                 await self._delete_from_s3(file_name)
             else:
-                raise Exception(f"Unknown provider: {provider}")
+                raise StorageFileNotFoundError(file_name, provider)
 
             # Track storage usage
             if file_size:
                 await storage_tracker.remove_file_usage(provider, file_size, file_name)
 
             logger.info(f"File deleted from {provider}: {file_name}")
+        except StorageFileNotFoundError:
+            raise
         except Exception as e:
             logger.error(f"Error deleting file from {provider}: {e}")
-            raise
+            # Don't raise - deletion is not critical for most flows
 
     async def _get_file_size(self, file_name: str, provider: str) -> Optional[int]:
         """Get file size from storage provider"""

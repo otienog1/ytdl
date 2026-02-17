@@ -49,13 +49,16 @@ class TestMultiStorageService:
         self, mock_tracker, storage_service
     ):
         """Test provider selection when no providers are available"""
+        from app.exceptions import StorageProviderNotAvailableError
+
         mock_tracker.get_available_providers_under_limit = AsyncMock(
             return_value=[]
         )
 
-        provider = await storage_service.select_random_provider()
+        with pytest.raises(StorageProviderNotAvailableError) as exc_info:
+            await storage_service.select_random_provider()
 
-        assert provider is None
+        assert exc_info.value.error_code == "STORAGE_FULL"
 
     def test_generate_filename_with_extension(self, storage_service):
         """Test filename generation with extension"""

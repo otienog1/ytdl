@@ -30,9 +30,10 @@ open htmlcov/index.html   # Mac/Linux
 
 | Module | Coverage | Tests |
 |--------|----------|-------|
-| services/youtube_service.py | 55% | 9 tests |
-| services/storage_service.py | 50% | 9 tests |
-| **Overall** | **33%** | **18 tests** |
+| services/youtube_service.py | 52% | 9 tests |
+| services/storage_service.py | 43% | 9 tests |
+| exceptions/__init__.py | 100% | 10 tests |
+| **Overall** | **35%** | **28 tests** |
 
 **Target**: 80% coverage for all services
 

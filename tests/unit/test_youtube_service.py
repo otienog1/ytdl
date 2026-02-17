@@ -2,12 +2,10 @@
 Unit tests for YouTube service
 """
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 from app.services.youtube_service import YouTubeService
 from app.models.download import VideoInfo
 import json
-import tempfile
-import os
 
 class TestYouTubeService:
     """Test YouTube service functionality"""
@@ -17,39 +15,64 @@ class TestYouTubeService:
         """Create YouTube service instance"""
         return YouTubeService()
 
-    def test_create_temp_cookies_file_success(self, youtube_service):
-        """Test successful creation of temporary cookies file"""
-        cookies = {
-            "LOGIN_INFO": "test_login_value",
-            "VISITOR_INFO1_LIVE": "test_visitor_value"
+    @pytest.mark.asyncio
+    @patch('subprocess.run')
+    async def test_authentication_with_valid_cookies(self, mock_run, youtube_service):
+        """Test that valid cookies enable successful authentication"""
+        # Simulate successful authentication with cookies
+        valid_cookies = {
+            "LOGIN_INFO": "valid_session_token",
+            "VISITOR_INFO1_LIVE": "valid_visitor_token"
         }
 
-        temp_file = youtube_service._create_temp_cookies_file(cookies)
+        mock_stdout = json.dumps({
+            "id": "authenticated_video",
+            "title": "Members Only Video",
+            "thumbnail": "https://i.ytimg.com/vi/test/maxresdefault.jpg",
+            "duration": 120,
+            "height": 1080
+        })
 
-        assert temp_file is not None
-        assert os.path.exists(temp_file)
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=mock_stdout
+        )
 
-        # Verify file content
-        with open(temp_file, 'r') as f:
-            content = f.read()
-            assert "Netscape HTTP Cookie File" in content
-            assert "LOGIN_INFO" in content
-            assert "test_login_value" in content
+        result = await youtube_service.get_video_info(
+            "https://youtube.com/shorts/authenticated_video",
+            cookies=valid_cookies
+        )
 
-        # Cleanup
-        os.remove(temp_file)
+        assert result.id == "authenticated_video"
+        # Verify cookies were used in the command
+        call_args = mock_run.call_args[0][0]
+        assert any('--cookies' in str(arg) for arg in call_args)
 
-    def test_create_temp_cookies_file_empty(self, youtube_service):
-        """Test creating cookies file with empty dict"""
-        cookies = {}
+    @pytest.mark.asyncio
+    @patch('subprocess.run')
+    async def test_fallback_without_cookies(self, mock_run, youtube_service):
+        """Test that system falls back to mobile clients without cookies"""
+        mock_stdout = json.dumps({
+            "id": "public_video",
+            "title": "Public Video",
+            "thumbnail": "https://i.ytimg.com/vi/test/maxresdefault.jpg",
+            "duration": 60,
+            "height": 720
+        })
 
-        temp_file = youtube_service._create_temp_cookies_file(cookies)
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=mock_stdout
+        )
 
-        assert temp_file is not None
+        result = await youtube_service.get_video_info(
+            "https://youtube.com/shorts/public_video"
+        )
 
-        # Cleanup
-        if temp_file and os.path.exists(temp_file):
-            os.remove(temp_file)
+        assert result.id == "public_video"
+        # Verify mobile client extractor args were used when no cookies
+        call_args = mock_run.call_args[0][0]
+        assert any('youtube:player_client=android,ios' in str(arg) for arg in call_args)
 
     @pytest.mark.asyncio
     @patch('subprocess.run')
@@ -115,15 +138,18 @@ class TestYouTubeService:
     @patch('subprocess.run')
     async def test_get_video_info_failure(self, mock_run, youtube_service):
         """Test video info retrieval failure"""
+        from app.exceptions import VideoDownloadError
+
         # Mock subprocess error
         mock_run.side_effect = Exception("yt-dlp command failed")
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(VideoDownloadError) as exc_info:
             await youtube_service.get_video_info(
-                "https://youtube.com/shorts/invalid"
+                "https://youtube.com/shorts/dQw4w9WgXcQ"
             )
 
-        assert "Failed to fetch video information" in str(exc_info.value)
+        assert exc_info.value.error_code == "VIDEO_DOWNLOAD_FAILED"
+        assert "dQw4w9WgXcQ" in exc_info.value.details["video_id"]
 
     @pytest.mark.asyncio
     @patch('subprocess.run')
