@@ -72,3 +72,21 @@ class AllStorageStatsResponse(BaseModel):
                 "total_file_count": 84
             }
         }
+
+
+class EnhancedStorageStatsResponse(BaseModel):
+    """Enhanced storage statistics with totals and availability"""
+    providers: list[StorageStatsResponse]
+    total_used_gb: float
+    total_available_gb: float
+    overall_used_percentage: float
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "providers": [],
+                "total_used_gb": 4.0,
+                "total_available_gb": 11.0,
+                "overall_used_percentage": 26.67
+            }
+        }
