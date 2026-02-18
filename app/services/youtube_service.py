@@ -15,6 +15,7 @@ from app.exceptions import (
     VideoNotFoundError,
     VideoDownloadError
 )
+from app.monitoring.metrics import metrics_tracker
 
 
 class YouTubeService:
@@ -67,172 +68,174 @@ class YouTubeService:
 
     async def get_video_info(self, url: str, cookies: Optional[Dict[str, str]] = None) -> VideoInfo:
         """Get video information using yt-dlp"""
-        video_id = self._extract_video_id(url)
-        temp_cookies_file = None
+        with metrics_tracker.track_youtube_api('get_video_info'):
+            video_id = self._extract_video_id(url)
+            temp_cookies_file = None
 
-        try:
-            cmd = [self.yt_dlp_path, '--dump-json', '--no-playlist', url]
+            try:
+                cmd = [self.yt_dlp_path, '--dump-json', '--no-playlist', url]
 
-            # Enable Node.js runtime (required for 2026 YouTube n-challenge)
-            cmd.extend(["--js-runtimes", "node"])
-            cmd.extend(["--remote-components", "ejs:github"])
+                # Enable Node.js runtime (required for 2026 YouTube n-challenge)
+                cmd.extend(["--js-runtimes", "node"])
+                cmd.extend(["--remote-components", "ejs:github"])
 
-            if self.ffmpeg_path != 'ffmpeg':
-                cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
+                if self.ffmpeg_path != 'ffmpeg':
+                    cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-            use_cookies_file = None
-            if self.cookies_file and os.path.exists(self.cookies_file):
-                use_cookies_file = self.cookies_file
-            elif cookies:
-                temp_cookies_file = self._create_temp_cookies_file(cookies)
+                use_cookies_file = None
+                if self.cookies_file and os.path.exists(self.cookies_file):
+                    use_cookies_file = self.cookies_file
+                elif cookies:
+                    temp_cookies_file = self._create_temp_cookies_file(cookies)
 
-            if temp_cookies_file:
-                use_cookies_file = temp_cookies_file
+                if temp_cookies_file:
+                    use_cookies_file = temp_cookies_file
 
-            if use_cookies_file:
-                cmd.extend(['--cookies', use_cookies_file])
-            else:
-                cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
-
-            if self.proxy:
-                cmd.extend(['--proxy', self.proxy])
-
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=settings.YTDLP_INFO_TIMEOUT
-            )
-
-            if result.returncode != 0:
-                stderr = result.stderr if result.stderr else ""
-
-                # Parse yt-dlp errors
-                if "Video unavailable" in stderr:
-                    raise VideoNotFoundError(video_id, "Video is unavailable")
-                elif "Private video" in stderr:
-                    raise VideoNotFoundError(video_id, "Video is private")
-                elif "This video is no longer available" in stderr:
-                    raise VideoNotFoundError(video_id, "Video has been removed")
-                elif "video doesn't exist" in stderr.lower():
-                    raise VideoNotFoundError(video_id, "Video does not exist")
+                if use_cookies_file:
+                    cmd.extend(['--cookies', use_cookies_file])
                 else:
-                    raise VideoDownloadError(video_id, stderr)
+                    cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
 
-            info = json.loads(result.stdout)
+                if self.proxy:
+                    cmd.extend(['--proxy', self.proxy])
 
-            return VideoInfo(
-                id=info['id'],
-                title=info['title'],
-                thumbnail=info['thumbnail'],
-                duration=info['duration'],
-                quality=f"{info.get('height', 'N/A')}p" if info.get('height') else None,
-                file_size=self._format_file_size(info.get('filesize')) if info.get('filesize') else None
-            )
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=settings.YTDLP_INFO_TIMEOUT
+                )
 
-        except subprocess.TimeoutExpired:
-            raise VideoDownloadError(video_id, f"Request timed out after {settings.YTDLP_INFO_TIMEOUT} seconds")
-        except FileNotFoundError:
-            raise VideoDownloadError(video_id, "yt-dlp binary not found")
-        except json.JSONDecodeError as e:
-            raise VideoDownloadError(video_id, f"Invalid JSON response from yt-dlp: {str(e)}")
-        except (InvalidVideoURLError, VideoNotFoundError, VideoDownloadError):
-            raise
-        except Exception as e:
-            logger.error(f"Error fetching video info: {e}")
-            raise VideoDownloadError(video_id, str(e))
-        finally:
-            if temp_cookies_file and os.path.exists(temp_cookies_file):
-                os.remove(temp_cookies_file)
+                if result.returncode != 0:
+                    stderr = result.stderr if result.stderr else ""
+
+                    # Parse yt-dlp errors
+                    if "Video unavailable" in stderr:
+                        raise VideoNotFoundError(video_id, "Video is unavailable")
+                    elif "Private video" in stderr:
+                        raise VideoNotFoundError(video_id, "Video is private")
+                    elif "This video is no longer available" in stderr:
+                        raise VideoNotFoundError(video_id, "Video has been removed")
+                    elif "video doesn't exist" in stderr.lower():
+                        raise VideoNotFoundError(video_id, "Video does not exist")
+                    else:
+                        raise VideoDownloadError(video_id, stderr)
+
+                info = json.loads(result.stdout)
+
+                return VideoInfo(
+                    id=info['id'],
+                    title=info['title'],
+                    thumbnail=info['thumbnail'],
+                    duration=info['duration'],
+                    quality=f"{info.get('height', 'N/A')}p" if info.get('height') else None,
+                    file_size=self._format_file_size(info.get('filesize')) if info.get('filesize') else None
+                )
+
+            except subprocess.TimeoutExpired:
+                raise VideoDownloadError(video_id, f"Request timed out after {settings.YTDLP_INFO_TIMEOUT} seconds")
+            except FileNotFoundError:
+                raise VideoDownloadError(video_id, "yt-dlp binary not found")
+            except json.JSONDecodeError as e:
+                raise VideoDownloadError(video_id, f"Invalid JSON response from yt-dlp: {str(e)}")
+            except (InvalidVideoURLError, VideoNotFoundError, VideoDownloadError):
+                raise
+            except Exception as e:
+                logger.error(f"Error fetching video info: {e}")
+                raise VideoDownloadError(video_id, str(e))
+            finally:
+                if temp_cookies_file and os.path.exists(temp_cookies_file):
+                    os.remove(temp_cookies_file)
 
     def download_video_sync(self, url: str, video_id: str, progress_callback=None, cookies: Optional[Dict[str, str]] = None) -> str:
         """Download video using yt-dlp with real-time progress tracking (sync version)"""
-        temp_cookies_file = None
-        try:
-            file_name = f"{video_id}_{uuid.uuid4().hex[:8]}.mp4"
-            output_path = self.download_dir / file_name
+        with metrics_tracker.track_youtube_api('download_video'):
+            temp_cookies_file = None
+            try:
+                file_name = f"{video_id}_{uuid.uuid4().hex[:8]}.mp4"
+                output_path = self.download_dir / file_name
 
-            cmd = [
-                self.yt_dlp_path,
-                '--js-runtimes', 'node',
-                '--remote-components', 'ejs:github',
-                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                '--merge-output-format', 'mp4',
-                '--newline',
-                '-o', str(output_path),
-                url
-            ]
+                cmd = [
+                    self.yt_dlp_path,
+                    '--js-runtimes', 'node',
+                    '--remote-components', 'ejs:github',
+                    '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                    '--merge-output-format', 'mp4',
+                    '--newline',
+                    '-o', str(output_path),
+                    url
+                ]
 
-            if self.ffmpeg_path != 'ffmpeg':
-                cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
+                if self.ffmpeg_path != 'ffmpeg':
+                    cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-            use_cookies_file = None
-            if self.cookies_file and os.path.exists(self.cookies_file):
-                use_cookies_file = self.cookies_file
-            elif cookies:
-                temp_cookies_file = self._create_temp_cookies_file(cookies)
+                use_cookies_file = None
+                if self.cookies_file and os.path.exists(self.cookies_file):
+                    use_cookies_file = self.cookies_file
+                elif cookies:
+                    temp_cookies_file = self._create_temp_cookies_file(cookies)
 
-            if temp_cookies_file:
-                use_cookies_file = temp_cookies_file
+                if temp_cookies_file:
+                    use_cookies_file = temp_cookies_file
 
-            if use_cookies_file:
-                cmd.extend(['--cookies', use_cookies_file])
-                cmd.extend(['--extractor-args', 'youtube:player_client=web'])
-            else:
-                cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
+                if use_cookies_file:
+                    cmd.extend(['--cookies', use_cookies_file])
+                    cmd.extend(['--extractor-args', 'youtube:player_client=web'])
+                else:
+                    cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
 
-            if self.proxy:
-                cmd.extend(['--proxy', self.proxy])
+                if self.proxy:
+                    cmd.extend(['--proxy', self.proxy])
 
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,
-                universal_newlines=True
-            )
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1,
+                    universal_newlines=True
+                )
 
-            logger.info(f"Starting download for {video_id}")
-            last_progress = 0
-            stderr_output = []
+                logger.info(f"Starting download for {video_id}")
+                last_progress = 0
+                stderr_output = []
 
-            for line in process.stdout:
-                line = line.strip()
-                stderr_output.append(line)
+                for line in process.stdout:
+                    line = line.strip()
+                    stderr_output.append(line)
 
-                if progress_callback:
-                    if '[download]' in line and '%' in line:
-                        match = re.search(r'(\d+\.?\d*)%', line)
-                        if match:
-                            percentage = float(match.group(1))
-                            scaled_progress = int(20 + (percentage * 0.6))
-                            if scaled_progress > last_progress:
-                                progress_callback(scaled_progress)
-                                last_progress = scaled_progress
-                    elif '[Merger]' in line or 'Merging formats' in line:
-                        progress_callback(85)
+                    if progress_callback:
+                        if '[download]' in line and '%' in line:
+                            match = re.search(r'(\d+\.?\d*)%', line)
+                            if match:
+                                percentage = float(match.group(1))
+                                scaled_progress = int(20 + (percentage * 0.6))
+                                if scaled_progress > last_progress:
+                                    progress_callback(scaled_progress)
+                                    last_progress = scaled_progress
+                        elif '[Merger]' in line or 'Merging formats' in line:
+                            progress_callback(85)
 
-            process.wait()
-            if process.returncode != 0:
-                stderr = "\n".join(stderr_output)
-                raise VideoDownloadError(video_id, stderr)
+                process.wait()
+                if process.returncode != 0:
+                    stderr = "\n".join(stderr_output)
+                    raise VideoDownloadError(video_id, stderr)
 
-            return str(output_path)
+                return str(output_path)
 
-        except subprocess.TimeoutExpired:
-            raise VideoDownloadError(video_id, f"Download timed out after {settings.YTDLP_DOWNLOAD_TIMEOUT} seconds")
-        except FileNotFoundError:
-            raise VideoDownloadError(video_id, "yt-dlp binary not found")
-        except VideoDownloadError:
-            raise
-        except Exception as e:
-            logger.error(f"Error downloading video: {e}")
-            raise VideoDownloadError(video_id, str(e))
-        finally:
-            if temp_cookies_file and os.path.exists(temp_cookies_file):
-                os.remove(temp_cookies_file)
+            except subprocess.TimeoutExpired:
+                raise VideoDownloadError(video_id, f"Download timed out after {settings.YTDLP_DOWNLOAD_TIMEOUT} seconds")
+            except FileNotFoundError:
+                raise VideoDownloadError(video_id, "yt-dlp binary not found")
+            except VideoDownloadError:
+                raise
+            except Exception as e:
+                logger.error(f"Error downloading video: {e}")
+                raise VideoDownloadError(video_id, str(e))
+            finally:
+                if temp_cookies_file and os.path.exists(temp_cookies_file):
+                    os.remove(temp_cookies_file)
 
     async def download_video(self, url: str, video_id: str, progress_callback=None) -> str:
         loop = asyncio.get_event_loop()

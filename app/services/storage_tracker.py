@@ -9,6 +9,7 @@ from app.config.multi_storage import multi_storage
 from app.models.storage_stats import StorageStats, StorageStatsResponse, AllStorageStatsResponse
 from app.services.email_service import email_service
 from app.utils.logger import logger
+from app.monitoring.metrics import storage_usage_bytes, storage_file_count
 
 
 class StorageTracker:
@@ -61,6 +62,11 @@ class StorageTracker:
         # Get updated stats
         stats = await db.storage_stats.find_one({"provider": provider})
 
+        # Update Prometheus metrics
+        if stats:
+            storage_usage_bytes.labels(provider=provider).set(stats["total_size_bytes"])
+            storage_file_count.labels(provider=provider).set(stats["file_count"])
+
         # Check if limit reached
         limit = settings.STORAGE_LIMIT_BYTES
         if stats and stats["total_size_bytes"] >= limit:
@@ -107,6 +113,10 @@ class StorageTracker:
         # Get updated stats to check if we're below limit now
         stats = await db.storage_stats.find_one({"provider": provider})
         if stats:
+            # Update Prometheus metrics
+            storage_usage_bytes.labels(provider=provider).set(stats["total_size_bytes"])
+            storage_file_count.labels(provider=provider).set(stats["file_count"])
+
             limit = settings.STORAGE_LIMIT_BYTES
             if stats["total_size_bytes"] < limit:
                 # Reset is_full and alert_sent flags

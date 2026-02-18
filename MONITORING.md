@@ -78,12 +78,28 @@ histogram_quantile(0.95, rate(download_duration_seconds_bucket[5m]))
 ✅ Core metrics infrastructure
 ✅ HTTP request tracking via middleware
 ✅ All metrics defined and accessible at /metrics
+✅ YouTube service metrics integration
+✅ Storage service metrics integration
+✅ Storage tracker metrics integration
 
-## TODO: Service Integration
+### Completed Integrations
 
-The following integrations are pending:
-- [ ] Integrate metrics into YouTube service methods
-- [ ] Integrate metrics into storage service methods
-- [ ] Add Celery task metrics
-- [ ] Create background job for metric updates
+- **YouTube Service**:
+  - `get_video_info()` - Tracks duration and success/failure
+  - `download_video_sync()` - Tracks download duration and success/failure
+
+- **Storage Service**:
+  - `_upload_to_gcs()` - Tracks GCS upload duration and success/failure
+  - `_upload_to_azure()` - Tracks Azure upload duration and success/failure
+  - `_upload_to_s3()` - Tracks S3 upload duration and success/failure
+
+- **Storage Tracker**:
+  - `add_file_usage()` - Updates storage_usage_bytes and storage_file_count gauges
+  - `remove_file_usage()` - Updates storage_usage_bytes and storage_file_count gauges
+
+## TODO: Optional Enhancements
+
+The following integrations are optional for future implementation:
+- [ ] Add Celery task metrics (if using Celery)
+- [ ] Create background job for metric updates (if needed)
 - [ ] Create Grafana dashboard configuration

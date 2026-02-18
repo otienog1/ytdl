@@ -15,6 +15,7 @@ from app.exceptions import (
     FileUploadError,
     FileNotFoundError as StorageFileNotFoundError
 )
+from app.monitoring.metrics import metrics_tracker
 
 
 class MultiStorageService:
@@ -87,76 +88,78 @@ class MultiStorageService:
 
     async def _upload_to_gcs(self, local_file_path: str, file_name: str) -> str:
         """Upload file to Google Cloud Storage"""
-        try:
-            bucket = multi_storage.get_gcs_bucket()
-            if not bucket:
-                raise FileUploadError("gcs", "GCS not configured")
+        with metrics_tracker.track_upload("gcs"):
+            try:
+                bucket = multi_storage.get_gcs_bucket()
+                if not bucket:
+                    raise FileUploadError("gcs", "GCS not configured")
 
-            blob = bucket.blob(file_name)
-            blob.upload_from_filename(
-                local_file_path,
-                content_type='video/mp4',
-                timeout=300,
-                retry=None
-            )
+                blob = bucket.blob(file_name)
+                blob.upload_from_filename(
+                    local_file_path,
+                    content_type='video/mp4',
+                    timeout=300,
+                    retry=None
+                )
 
-            # Generate signed URL with download disposition (1 hour)
-            url = blob.generate_signed_url(
-                expiration=timedelta(hours=1),
-                method='GET',
-                response_disposition=f'attachment; filename="{file_name}"'
-            )
+                # Generate signed URL with download disposition (1 hour)
+                url = blob.generate_signed_url(
+                    expiration=timedelta(hours=1),
+                    method='GET',
+                    response_disposition=f'attachment; filename="{file_name}"'
+                )
 
-            return url
-        except FileUploadError:
-            raise
-        except Exception as e:
-            raise FileUploadError("gcs", str(e))
+                return url
+            except FileUploadError:
+                raise
+            except Exception as e:
+                raise FileUploadError("gcs", str(e))
 
     async def _upload_to_azure(self, local_file_path: str, file_name: str) -> str:
         """Upload file to Azure Blob Storage"""
-        try:
-            from azure.storage.blob import ContentSettings
+        with metrics_tracker.track_upload("azure"):
+            try:
+                from azure.storage.blob import ContentSettings
 
-            container_client = multi_storage.get_azure_container_client()
-            if not container_client:
-                raise FileUploadError("azure", "Azure not configured")
+                container_client = multi_storage.get_azure_container_client()
+                if not container_client:
+                    raise FileUploadError("azure", "Azure not configured")
 
-            blob_client = container_client.get_blob_client(file_name)
+                blob_client = container_client.get_blob_client(file_name)
 
-            with open(local_file_path, "rb") as data:
-                blob_client.upload_blob(
-                    data,
-                    content_settings=ContentSettings(content_type="video/mp4"),
-                    overwrite=True
+                with open(local_file_path, "rb") as data:
+                    blob_client.upload_blob(
+                        data,
+                        content_settings=ContentSettings(content_type="video/mp4"),
+                        overwrite=True
+                    )
+
+                # Generate SAS URL for download (1 hour)
+                from azure.storage.blob import generate_blob_sas, BlobSasPermissions
+                from datetime import datetime, timedelta
+
+                # Get connection info from container client
+                account_name = blob_client.account_name
+                container_name = container_client.container_name
+
+                # Generate SAS token
+                from app.config.settings import settings
+                sas_token = generate_blob_sas(
+                    account_name=account_name,
+                    container_name=container_name,
+                    blob_name=file_name,
+                    account_key=self._extract_azure_account_key(),
+                    permission=BlobSasPermissions(read=True),
+                    expiry=datetime.utcnow() + timedelta(hours=1),
+                    content_disposition=f'attachment; filename="{file_name}"'
                 )
 
-            # Generate SAS URL for download (1 hour)
-            from azure.storage.blob import generate_blob_sas, BlobSasPermissions
-            from datetime import datetime, timedelta
-
-            # Get connection info from container client
-            account_name = blob_client.account_name
-            container_name = container_client.container_name
-
-            # Generate SAS token
-            from app.config.settings import settings
-            sas_token = generate_blob_sas(
-                account_name=account_name,
-                container_name=container_name,
-                blob_name=file_name,
-                account_key=self._extract_azure_account_key(),
-                permission=BlobSasPermissions(read=True),
-                expiry=datetime.utcnow() + timedelta(hours=1),
-                content_disposition=f'attachment; filename="{file_name}"'
-            )
-
-            url = f"{blob_client.url}?{sas_token}"
-            return url
-        except FileUploadError:
-            raise
-        except Exception as e:
-            raise FileUploadError("azure", str(e))
+                url = f"{blob_client.url}?{sas_token}"
+                return url
+            except FileUploadError:
+                raise
+            except Exception as e:
+                raise FileUploadError("azure", str(e))
 
     def _extract_azure_account_key(self) -> str:
         """Extract account key from Azure connection string"""
@@ -169,39 +172,40 @@ class MultiStorageService:
 
     async def _upload_to_s3(self, local_file_path: str, file_name: str) -> str:
         """Upload file to AWS S3"""
-        try:
-            s3_client = multi_storage.get_s3_client()
-            bucket_name = multi_storage.get_s3_bucket_name()
-            if not s3_client or not bucket_name:
-                raise FileUploadError("s3", "S3 not configured")
+        with metrics_tracker.track_upload("s3"):
+            try:
+                s3_client = multi_storage.get_s3_client()
+                bucket_name = multi_storage.get_s3_bucket_name()
+                if not s3_client or not bucket_name:
+                    raise FileUploadError("s3", "S3 not configured")
 
-            # Upload file
-            s3_client.upload_file(
-                local_file_path,
-                bucket_name,
-                file_name,
-                ExtraArgs={
-                    'ContentType': 'video/mp4',
-                    'ContentDisposition': f'attachment; filename="{file_name}"'
-                }
-            )
+                # Upload file
+                s3_client.upload_file(
+                    local_file_path,
+                    bucket_name,
+                    file_name,
+                    ExtraArgs={
+                        'ContentType': 'video/mp4',
+                        'ContentDisposition': f'attachment; filename="{file_name}"'
+                    }
+                )
 
-            # Generate presigned URL (1 hour)
-            url = s3_client.generate_presigned_url(
-                'get_object',
-                Params={
-                    'Bucket': bucket_name,
-                    'Key': file_name,
-                    'ResponseContentDisposition': f'attachment; filename="{file_name}"'
-                },
-                ExpiresIn=3600  # 1 hour
-            )
+                # Generate presigned URL (1 hour)
+                url = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': bucket_name,
+                        'Key': file_name,
+                        'ResponseContentDisposition': f'attachment; filename="{file_name}"'
+                    },
+                    ExpiresIn=3600  # 1 hour
+                )
 
-            return url
-        except FileUploadError:
-            raise
-        except Exception as e:
-            raise FileUploadError("s3", str(e))
+                return url
+            except FileUploadError:
+                raise
+            except Exception as e:
+                raise FileUploadError("s3", str(e))
 
     async def delete_file(self, file_name: str, provider: str):
         """Delete file from specified storage provider"""
