@@ -7,6 +7,7 @@ from app.utils.logger import logger
 from app.config.database import get_database, connect_to_mongo
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.config.settings import settings
+from app.websocket import manager
 
 # Initialize database connection for Celery worker
 _db_client = None
@@ -228,7 +229,7 @@ def _extract_filename_from_url(url: str) -> str:
 
 
 async def _update_status(job_id: str, status: str, **kwargs):
-    """Update download status in database"""
+    """Update download status in database and send WebSocket notification"""
     try:
         db = await _get_db()
         update_data = {'status': status, 'updatedAt': __import__('datetime').datetime.utcnow()}
@@ -238,5 +239,23 @@ async def _update_status(job_id: str, status: str, **kwargs):
             {'jobId': job_id},
             {'$set': update_data}
         )
+
+        # Send WebSocket update
+        try:
+            progress = kwargs.get('progress')
+            ws_data = {
+                "type": "status",
+                "data": {
+                    "jobId": job_id,
+                    "status": status,
+                    "progress": progress,
+                    **kwargs
+                }
+            }
+            await manager.send_update(job_id, ws_data)
+            logger.debug(f"WebSocket update sent for job {job_id}: {status} ({progress}%)")
+        except Exception as ws_error:
+            logger.error(f"Failed to send WebSocket update: {ws_error}")
+
     except Exception as e:
         logger.error(f"Error updating status: {e}")
