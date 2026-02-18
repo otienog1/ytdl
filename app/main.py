@@ -11,9 +11,11 @@ from app.config.settings import settings
 from app.config.database import connect_to_mongo, close_mongo_connection
 from app.config.redis_client import redis_client
 from app.middleware.rate_limit import limiter, _rate_limit_exceeded_handler
+from app.middleware.metrics_middleware import MetricsMiddleware
 from app.routes import download, status as status_routes, history, storage_routes
 from app.utils.logger import logger
 from app.exceptions import AppException
+from prometheus_client import make_asgi_app
 
 
 @asynccontextmanager
@@ -55,6 +57,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Metrics middleware
+app.add_middleware(MetricsMiddleware)
+
 
 # Health check
 @app.get("/health")
@@ -70,6 +75,10 @@ app.include_router(download.router, prefix="/api/download", tags=["download"])
 app.include_router(status_routes.router, prefix="/api/status", tags=["status"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])
 app.include_router(storage_routes.router)
+
+# Mount Prometheus metrics endpoint
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 
 # Error handlers
