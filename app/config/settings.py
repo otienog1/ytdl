@@ -6,6 +6,7 @@ from pydantic import ConfigDict
 class Settings(BaseSettings):
     # Database
     MONGODB_URI: str
+    MONGODB_DB_NAME: str = "ytdl_db"  # Default database name
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"

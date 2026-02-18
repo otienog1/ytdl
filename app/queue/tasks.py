@@ -191,12 +191,19 @@ async def _get_db():
     """Get database instance for Celery worker"""
     global _db_client, _db
     if _db is None:
-        _db_client = AsyncIOMotorClient(settings.MONGODB_URI)
+        _db_client = AsyncIOMotorClient(
+            settings.MONGODB_URI,
+            maxPoolSize=50,  # Maximum number of connections in the pool
+            minPoolSize=10,  # Minimum number of connections to maintain
+            maxIdleTimeMS=30000,  # Close connections idle for 30 seconds
+            serverSelectionTimeoutMS=5000,  # Timeout for server selection
+        )
         try:
             _db = _db_client.get_database()
         except:
-            # If no database in URI, use the database name from URI or default
-            _db = _db_client["ytdl_db"]
+            # If no database in URI, use the database name from settings
+            _db = _db_client[settings.MONGODB_DB_NAME]
+            logger.info(f"Celery worker using database: {settings.MONGODB_DB_NAME}")
     return _db
 
 

@@ -33,8 +33,8 @@ async def get_storage_stats():
     stats = await storage_tracker.get_all_stats()
 
     # Calculate enhanced totals
-    total_used_bytes = sum(p['total_size_bytes'] for p in stats['providers'])
-    total_available_bytes = sum(p['available_bytes'] for p in stats['providers'])
+    total_used_bytes = sum(p.total_size_bytes for p in stats.providers)
+    total_available_bytes = sum(p.available_bytes for p in stats.providers)
     total_capacity_bytes = total_used_bytes + total_available_bytes
 
     total_used_gb = total_used_bytes / (1024 ** 3)
@@ -42,7 +42,7 @@ async def get_storage_stats():
     overall_used_percentage = (total_used_bytes / total_capacity_bytes * 100) if total_capacity_bytes > 0 else 0
 
     return EnhancedStorageStatsResponse(
-        providers=stats['providers'],
+        providers=stats.providers,
         total_used_gb=total_used_gb,
         total_available_gb=total_available_gb,
         overall_used_percentage=overall_used_percentage

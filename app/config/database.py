@@ -15,15 +15,21 @@ db = Database()
 async def connect_to_mongo():
     """Connect to MongoDB"""
     try:
-        db.client = AsyncIOMotorClient(settings.MONGODB_URI)
+        db.client = AsyncIOMotorClient(
+            settings.MONGODB_URI,
+            maxPoolSize=50,  # Maximum number of connections in the pool
+            minPoolSize=10,  # Minimum number of connections to maintain
+            maxIdleTimeMS=30000,  # Close connections idle for 30 seconds
+            serverSelectionTimeoutMS=5000,  # Timeout for server selection
+        )
 
-        # Try to get database from URI, otherwise use default name
+        # Try to get database from URI, otherwise use database name from settings
         try:
             db.db = db.client.get_database()
         except:
-            # If no database in URI, use a default name
-            db.db = db.client["youtube_shorts_downloader"]
-            logger.info("Using default database name: youtube_shorts_downloader")
+            # If no database in URI, use the database name from settings
+            db.db = db.client[settings.MONGODB_DB_NAME]
+            logger.info(f"Using database name from settings: {settings.MONGODB_DB_NAME}")
 
         # Test connection
         await db.client.admin.command('ping')
