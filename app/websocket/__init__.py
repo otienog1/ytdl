@@ -1,17 +1,27 @@
 """
-WebSocket connection management
+WebSocket connection management with Redis pub/sub for cross-process communication
 """
 from typing import Dict, Set
 from fastapi import WebSocket
 from app.utils.logger import logger
+import redis
+import json
+from app.config.settings import settings
 
 
 class ConnectionManager:
-    """Manage WebSocket connections"""
+    """Manage WebSocket connections with Redis pub/sub"""
 
     def __init__(self):
         # job_id -> set of WebSocket connections
         self.active_connections: Dict[str, Set[WebSocket]] = {}
+        # Redis client for pub/sub (sync client for Celery compatibility)
+        try:
+            self.redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+            logger.info("WebSocket manager connected to Redis")
+        except Exception as e:
+            logger.error(f"Failed to connect to Redis for WebSocket: {e}")
+            self.redis_client = None
 
     async def connect(self, websocket: WebSocket, job_id: str):
         """Accept and register new WebSocket connection"""
@@ -35,23 +45,37 @@ class ConnectionManager:
         logger.info(f"WebSocket disconnected for job {job_id}")
 
     async def send_update(self, job_id: str, data: dict):
-        """Send update to all connections for a job"""
-        if job_id not in self.active_connections:
-            return
-
-        # Send to all connected clients for this job
-        disconnected = set()
-
-        for connection in self.active_connections[job_id]:
+        """
+        Send update to all connections for a job.
+        Uses Redis pub/sub to bridge Celery worker -> FastAPI server communication.
+        """
+        # If called from Celery worker (no active connections), publish to Redis
+        if job_id not in self.active_connections and self.redis_client:
             try:
-                await connection.send_json(data)
+                # Publish update to Redis channel
+                channel = f"websocket:{job_id}"
+                message = json.dumps(data)
+                self.redis_client.publish(channel, message)
+                logger.debug(f"Published WebSocket update to Redis for job {job_id}")
+                return
             except Exception as e:
-                logger.error(f"Error sending to WebSocket: {e}")
-                disconnected.add(connection)
+                logger.error(f"Failed to publish to Redis: {e}")
+                return
 
-        # Clean up disconnected clients
-        for connection in disconnected:
-            self.disconnect(connection, job_id)
+        # If called from FastAPI server (has active connections), send directly
+        if job_id in self.active_connections:
+            disconnected = set()
+
+            for connection in self.active_connections[job_id]:
+                try:
+                    await connection.send_json(data)
+                except Exception as e:
+                    logger.error(f"Error sending to WebSocket: {e}")
+                    disconnected.add(connection)
+
+            # Clean up disconnected clients
+            for connection in disconnected:
+                self.disconnect(connection, job_id)
 
     async def broadcast(self, data: dict):
         """Broadcast message to all connections"""
