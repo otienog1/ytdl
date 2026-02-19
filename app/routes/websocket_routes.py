@@ -66,6 +66,9 @@ async def websocket_download_endpoint(websocket: WebSocket, job_id: str):
 
 async def _subscribe_to_redis_updates(websocket: WebSocket, job_id: str):
     """Subscribe to Redis pub/sub and forward messages to WebSocket"""
+    pubsub = None
+    redis_client = None
+
     try:
         # Create a new Redis connection for pubsub (sync Redis in async context)
         import redis
@@ -94,7 +97,7 @@ async def _subscribe_to_redis_updates(websocket: WebSocket, job_id: str):
                     # Parse and forward to WebSocket
                     data = json.loads(message['data'])
                     await websocket.send_json(data)
-                    logger.debug(f"Forwarded Redis message to WebSocket: {job_id}")
+                    logger.info(f"Forwarded Redis message to WebSocket: {job_id} - progress: {data.get('data', {}).get('progress', 'N/A')}%")
                 except Exception as e:
                     logger.error(f"Error forwarding Redis message: {e}")
 
@@ -103,8 +106,18 @@ async def _subscribe_to_redis_updates(websocket: WebSocket, job_id: str):
 
     except asyncio.CancelledError:
         logger.info(f"Redis subscription cancelled for job {job_id}")
-        if pubsub:
-            pubsub.unsubscribe(channel)
-            pubsub.close()
     except Exception as e:
-        logger.error(f"Redis subscription error for job {job_id}: {e}")
+        logger.error(f"Redis subscription error for job {job_id}: {e}", exc_info=True)
+    finally:
+        # Clean up Redis connection
+        if pubsub:
+            try:
+                pubsub.unsubscribe(channel)
+                pubsub.close()
+            except Exception as e:
+                logger.error(f"Error closing pubsub: {e}")
+        if redis_client:
+            try:
+                redis_client.close()
+            except Exception as e:
+                logger.error(f"Error closing redis client: {e}")

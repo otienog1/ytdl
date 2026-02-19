@@ -55,11 +55,12 @@ class ConnectionManager:
                 # Publish update to Redis channel
                 channel = f"websocket:{job_id}"
                 message = json.dumps(data)
-                self.redis_client.publish(channel, message)
-                logger.debug(f"Published WebSocket update to Redis for job {job_id}")
+                result = self.redis_client.publish(channel, message)
+                progress = data.get('data', {}).get('progress', 'N/A')
+                logger.info(f"Published WebSocket update to Redis for job {job_id} - progress: {progress}% (subscribers: {result})")
                 return
             except Exception as e:
-                logger.error(f"Failed to publish to Redis: {e}")
+                logger.error(f"Failed to publish to Redis: {e}", exc_info=True)
                 return
 
         # If called from FastAPI server (has active connections), send directly
