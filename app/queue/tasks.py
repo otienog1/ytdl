@@ -67,11 +67,19 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
         })
 
         if existing_download:
-            logger.info(f"Video {video_id} already exists in GCS, reusing existing file")
+            logger.info(f"Video {video_id} already exists in storage, reusing existing file")
+
+            # Progress: 30% - Extracting filename
+            await _update_status(job_id, 'processing', progress=30)
+            task.update_state(state='PROGRESS', meta={'progress': 30})
 
             # Extract filename from existing download URL
             old_url = existing_download.get('downloadUrl')
             file_name = _extract_filename_from_url(old_url)
+
+            # Progress: 50% - Generating new signed URL
+            await _update_status(job_id, 'processing', progress=50)
+            task.update_state(state='PROGRESS', meta={'progress': 50})
 
             if file_name:
                 # Get provider from existing download (default to gcs for old records)
@@ -85,11 +93,15 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
                 download_url = old_url
                 logger.warning(f"Could not extract filename from URL, using old URL")
 
+            # Progress: 70% - Retrieving file metadata
+            await _update_status(job_id, 'processing', progress=70)
+            task.update_state(state='PROGRESS', meta={'progress': 70})
+
             # Get file size and provider from existing download for reuse
             storage_provider = existing_download.get('storageProvider', 'gcs')
             file_size = existing_download.get('fileSize', 0)
 
-            # Update current job with existing data
+            # Progress: 90% - Preparing response
             await _update_status(job_id, 'processing', progress=90)
             task.update_state(state='PROGRESS', meta={'progress': 90})
         else:
@@ -131,6 +143,7 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
                     current_prog = current_progress['value']
 
                 if current_prog > last_reported_progress:
+                    logger.info(f"Progress update: {current_prog}% (job: {job_id})")
                     await _update_status(job_id, 'processing', progress=current_prog)
                     task.update_state(state='PROGRESS', meta={'progress': current_prog})
                     last_reported_progress = current_prog
