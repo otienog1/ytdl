@@ -286,7 +286,7 @@ class MultiStorageService:
             )
         elif provider == "azure":
             from azure.storage.blob import generate_blob_sas, BlobSasPermissions
-            from datetime import datetime, timedelta
+            from datetime import datetime
             container_client = multi_storage.get_azure_container_client()
             blob_client = container_client.get_blob_client(file_name)
             account_name = blob_client.account_name
