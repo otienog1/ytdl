@@ -6,7 +6,7 @@ celery_app = Celery(
     "youtube_shorts_downloader",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=['app.queue.tasks', 'app.queue.cleanup_tasks']
+    include=['app.queue.tasks', 'app.queue.cleanup_tasks', 'app.queue.storage_sync_task']
 )
 
 celery_app.conf.update(
@@ -29,5 +29,9 @@ celery_app.conf.beat_schedule = {
     'cleanup-failed-downloads': {
         'task': 'app.queue.cleanup_tasks.cleanup_failed_downloads',
         'schedule': crontab(hour='*/12'),  # Run every 12 hours
+    },
+    'sync-storage-stats': {
+        'task': 'sync_storage_stats',
+        'schedule': crontab(hour=3, minute=0),  # Run daily at 3 AM UTC
     },
 }
