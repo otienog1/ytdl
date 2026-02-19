@@ -28,6 +28,7 @@ class Download(BaseModel):
     video_info: Optional[VideoInfo] = Field(None, alias="videoInfo")
     download_url: Optional[str] = Field(None, alias="downloadUrl")
     error: Optional[str] = None
+    user_id: Optional[str] = Field(None, alias="userId")
     created_at: datetime = Field(default_factory=datetime.utcnow, alias="createdAt")
     updated_at: datetime = Field(default_factory=datetime.utcnow, alias="updatedAt")
 

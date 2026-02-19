@@ -12,6 +12,7 @@ YOUTUBE_SHORTS_PATTERNS = [
 class DownloadRequest(BaseModel):
     url: HttpUrl
     cookies: Optional[Dict[str, str]] = None  # Optional YouTube cookies from frontend
+    user_id: Optional[str] = None  # Firebase user ID for authenticated users
 
     @field_validator('url')
     @classmethod
