@@ -42,23 +42,13 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
         await _update_status(job_id, 'processing', progress=5)
         task.update_state(state='PROGRESS', meta={'progress': 5})
 
-        # Get video info
+        # Extract video ID first
         video_id = extract_video_id(url)
         if not video_id:
             raise Exception("Invalid video URL")
 
-        logger.info(f"Fetching video info for: {video_id}")
-        video_info = await youtube_service.get_video_info(url, cookies=cookies)
-
-        await _update_status(
-            job_id,
-            'processing',
-            progress=10
-        )
-        task.update_state(state='PROGRESS', meta={'progress': 10})
-
-        # Check if this video was already processed by looking for a completed download
-        # with the same video_id in the database
+        # Check if this video was already processed BEFORE fetching info
+        # This avoids unnecessary YouTube API calls and downloads for duplicate videos
         db = await _get_db()
         existing_download = await db.downloads.find_one({
             'videoInfo.id': video_id,
@@ -66,8 +56,33 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
             'downloadUrl': {'$exists': True, '$ne': None}
         })
 
+        # Only fetch video info if we don't have it cached
+        if not existing_download:
+            logger.info(f"Fetching video info for new video: {video_id}")
+            video_info = await youtube_service.get_video_info(url, cookies=cookies)
+
+            await _update_status(
+                job_id,
+                'processing',
+                progress=10
+            )
+            task.update_state(state='PROGRESS', meta={'progress': 10})
+        else:
+            # Use cached video info from existing download
+            logger.info(f"Video {video_id} already exists - using cached info, skipping download")
+            video_info_dict = existing_download.get('videoInfo')
+            # Convert dict back to VideoInfo object
+            from app.models.download import VideoInfo
+            video_info = VideoInfo(**video_info_dict)
+
+            await _update_status(
+                job_id,
+                'processing',
+                progress=10
+            )
+            task.update_state(state='PROGRESS', meta={'progress': 10})
+
         if existing_download:
-            logger.info(f"Video {video_id} already exists in storage, reusing existing file")
 
             # Progress: 30% - Extracting filename
             await _update_status(job_id, 'processing', progress=30)
@@ -171,8 +186,13 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict = N
             await _update_status(job_id, 'processing', progress=98)
             task.update_state(state='PROGRESS', meta={'progress': 98})
 
-            # Clean up local file
-            await youtube_service.delete_local_file(local_file_path)
+            # Clean up local file - ensure this always happens
+            try:
+                logger.info(f"Deleting local file: {local_file_path}")
+                await youtube_service.delete_local_file(local_file_path)
+                logger.info(f"Successfully deleted local file: {local_file_path}")
+            except Exception as cleanup_error:
+                logger.error(f"Failed to delete local file {local_file_path}: {cleanup_error}")
 
         # Update status to completed with all data
         video_info_dict = video_info.model_dump(by_alias=True)
