@@ -259,6 +259,7 @@ npm run dev
 5. **Database name inconsistency** - Made configurable via env var
 6. **Redis max clients** - Switched to local Memurai
 7. **Celery worker connections** - Added pooling to tasks.py
+8. **Video deduplication UnboundLocalError** - Fixed timedelta scoping issue in storage_service.py (see [BUGFIX_TIMEDELTA.md](backend-python/BUGFIX_TIMEDELTA.md))
 
 ---
 
