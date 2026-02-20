@@ -51,6 +51,9 @@ downloads/
 *.mp4
 *.webm
 
+# MongoDB dumps (may contain sensitive data)
+mongodb_dump/
+
 # Celery
 celerybeat-schedule
 celerybeat-schedule-shm
