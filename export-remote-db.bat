@@ -43,7 +43,21 @@ echo Exporting from MongoDB Atlas...
 echo ================================================
 
 REM Export from Atlas (this will create a dump folder)
-mongodump --uri="mongodb+srv://mongoatlas_user:yZNOgPARUbX5c20k@scrapperclusteraws.yhrl4e7.mongodb.net/ytdl_db?appName=ScrapperClusterAWS" --out=mongodb_dump
+REM Set MONGODB_ATLAS_URI in your environment variables or .env file
+REM Example: set MONGODB_ATLAS_URI=mongodb+srv://user:password@cluster.mongodb.net/ytdl_db
+
+if "%MONGODB_ATLAS_URI%"=="" (
+    echo ERROR: MONGODB_ATLAS_URI environment variable not set!
+    echo.
+    echo Please set it first:
+    echo   set MONGODB_ATLAS_URI=mongodb+srv://user:password@cluster.mongodb.net/ytdl_db
+    echo.
+    echo Or add it to your .env file
+    pause
+    exit /b 1
+)
+
+mongodump --uri="%MONGODB_ATLAS_URI%" --out=mongodb_dump
 
 echo.
 echo ================================================
