@@ -12,7 +12,7 @@ from app.config.database import connect_to_mongo, close_mongo_connection
 from app.config.redis_client import redis_client
 from app.middleware.rate_limit import limiter, _rate_limit_exceeded_handler
 from app.middleware.metrics_middleware import MetricsMiddleware
-from app.routes import download, status as status_routes, history, storage_routes, websocket_routes, admin_routes
+from app.routes import download, status as status_routes, history, storage_routes, websocket_routes, admin_routes, cookie_routes
 from app.utils.logger import logger
 from app.exceptions import AppException
 from prometheus_client import make_asgi_app
@@ -77,6 +77,7 @@ app.include_router(history.router, prefix="/api/history", tags=["history"])
 app.include_router(storage_routes.router)
 app.include_router(websocket_routes.router)
 app.include_router(admin_routes.router)
+app.include_router(cookie_routes.router, prefix="/api/cookies", tags=["cookies"])
 
 # Mount Prometheus metrics endpoint
 metrics_app = make_asgi_app()

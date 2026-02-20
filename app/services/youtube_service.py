@@ -16,6 +16,7 @@ from app.exceptions import (
     VideoDownloadError
 )
 from app.monitoring.metrics import metrics_tracker
+from app.services.cookie_refresh_service import cookie_refresh_service
 
 
 class YouTubeService:
@@ -66,6 +67,21 @@ class YouTubeService:
             logger.error(f"Error creating temp cookies file: {e}")
             return None
 
+    def _handle_cookie_error(self, error_message: str, video_id: str):
+        """Handle cookie-related errors by triggering cookie refresh"""
+        # Check if cookies file is missing
+        if not cookie_refresh_service.check_cookies_file_exists():
+            logger.warning(f"⚠️ Cookies file missing for video {video_id}")
+            cookie_refresh_service.trigger_cookie_refresh(reason="missing_cookies")
+            return
+
+        # Check if error indicates bot detection or authentication issues
+        if cookie_refresh_service.is_cookie_refresh_needed(error_message):
+            logger.warning(f"🔄 Cookie refresh needed for video {video_id}: {error_message[:100]}")
+            cookie_refresh_service.trigger_cookie_refresh(reason="bot_detection")
+        else:
+            logger.debug(f"Error does not require cookie refresh: {error_message[:100]}")
+
     async def get_video_info(self, url: str, cookies: Optional[Dict[str, str]] = None) -> VideoInfo:
         """Get video information using yt-dlp"""
         with metrics_tracker.track_youtube_api('get_video_info'):
@@ -109,6 +125,9 @@ class YouTubeService:
 
                 if result.returncode != 0:
                     stderr = result.stderr if result.stderr else ""
+
+                    # Check for cookie-related errors and trigger refresh if needed
+                    self._handle_cookie_error(stderr, video_id)
 
                     # Parse yt-dlp errors
                     if "Video unavailable" in stderr:
@@ -220,6 +239,10 @@ class YouTubeService:
                 process.wait()
                 if process.returncode != 0:
                     stderr = "\n".join(stderr_output)
+
+                    # Check for cookie-related errors and trigger refresh if needed
+                    self._handle_cookie_error(stderr, video_id)
+
                     raise VideoDownloadError(video_id, stderr)
 
                 return str(output_path)
