@@ -32,7 +32,7 @@ Set environment variables directly on the server or use a `.env.production` file
 
 ```bash
 # Option 1: Set system environment variables
-export MONGODB_URI="mongodb+srv://user:password@cluster.mongodb.net/ytdl_db"
+export MONGODB_URI="mongodb+srv://username:password@cluster.mongodb.net/database_name"
 export REDIS_URL="redis://localhost:6379"
 
 # Option 2: Use .env.production file (gitignored)
@@ -50,7 +50,7 @@ The following scripts now use environment variables instead of hardcoded credent
 
 ```bash
 # Set the variable before running the script
-set MONGODB_ATLAS_URI=mongodb+srv://user:password@cluster.mongodb.net/ytdl_db
+set MONGODB_ATLAS_URI=mongodb+srv://username:password@cluster.mongodb.net/database_name
 export-remote-db.bat
 ```
 

@@ -44,13 +44,13 @@ echo ================================================
 
 REM Export from Atlas (this will create a dump folder)
 REM Set MONGODB_ATLAS_URI in your environment variables or .env file
-REM Example: set MONGODB_ATLAS_URI=mongodb+srv://user:password@cluster.mongodb.net/ytdl_db
+REM Example: set MONGODB_ATLAS_URI=mongodb+srv://username:password@cluster.mongodb.net/database_name
 
 if "%MONGODB_ATLAS_URI%"=="" (
     echo ERROR: MONGODB_ATLAS_URI environment variable not set!
     echo.
     echo Please set it first:
-    echo   set MONGODB_ATLAS_URI=mongodb+srv://user:password@cluster.mongodb.net/ytdl_db
+    echo   set MONGODB_ATLAS_URI=mongodb+srv://username:password@cluster.mongodb.net/database_name
     echo.
     echo Or add it to your .env file
     pause
