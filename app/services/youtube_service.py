@@ -13,7 +13,8 @@ from app.config.settings import settings
 from app.exceptions import (
     InvalidVideoURLError,
     VideoNotFoundError,
-    VideoDownloadError
+    VideoDownloadError,
+    CookieUnavailableError
 )
 from app.monitoring.metrics import metrics_tracker
 from app.services.cookie_refresh_service import cookie_refresh_service
@@ -25,14 +26,15 @@ class YouTubeService:
         self.download_dir.mkdir(exist_ok=True)
 
         # Get yt-dlp path (use local venv version by default)
-        self.yt_dlp_path = os.getenv('YT_DLP_PATH', 'yt-dlp')
+        self.yt_dlp_path = settings.YT_DLP_PATH or os.getenv('YT_DLP_PATH', 'yt-dlp')
 
         # Get ffmpeg path (use local bin version if available)
-        self.ffmpeg_path = os.getenv('FFMPEG_PATH', 'ffmpeg')
-        self.ffprobe_path = os.getenv('FFPROBE_PATH', 'ffprobe')
+        self.ffmpeg_path = settings.FFMPEG_PATH or os.getenv('FFMPEG_PATH', 'ffmpeg')
+        self.ffprobe_path = settings.FFPROBE_PATH or os.getenv('FFPROBE_PATH', 'ffprobe')
 
-        # Optional cookies file for YouTube authentication (to avoid bot detection)
-        self.cookies_file = os.getenv('YT_DLP_COOKIES_FILE')
+        # Cookies file for this server's YouTube account
+        self.cookies_file = settings.YT_DLP_COOKIES_FILE
+        self.account_id = settings.YT_ACCOUNT_ID
 
         # Optional proxy (helps bypass IP-based bot detection on cloud servers)
         self.proxy = os.getenv('YT_DLP_PROXY')
@@ -68,17 +70,20 @@ class YouTubeService:
             return None
 
     def _handle_cookie_error(self, error_message: str, video_id: str):
-        """Handle cookie-related errors by triggering cookie refresh"""
+        """Handle cookie-related errors by triggering cookie refresh and raising 503 for failover"""
         # Check if cookies file is missing
         if not cookie_refresh_service.check_cookies_file_exists():
-            logger.warning(f"⚠️ Cookies file missing for video {video_id}")
+            logger.warning(f"⚠️ Cookies file missing for account {self.account_id}, video {video_id}")
             cookie_refresh_service.trigger_cookie_refresh(reason="missing_cookies")
-            return
+            # Raise 503 to trigger load balancer failover to another server
+            raise CookieUnavailableError(self.account_id, reason="missing_cookies")
 
         # Check if error indicates bot detection or authentication issues
         if cookie_refresh_service.is_cookie_refresh_needed(error_message):
-            logger.warning(f"🔄 Cookie refresh needed for video {video_id}: {error_message[:100]}")
+            logger.warning(f"🔄 Cookie refresh needed for account {self.account_id}, video {video_id}: {error_message[:100]}")
             cookie_refresh_service.trigger_cookie_refresh(reason="bot_detection")
+            # Raise 503 to trigger load balancer failover to another server
+            raise CookieUnavailableError(self.account_id, reason="bot_detection")
         else:
             logger.debug(f"Error does not require cookie refresh: {error_message[:100]}")
 
@@ -98,12 +103,12 @@ class YouTubeService:
                 if self.ffmpeg_path != 'ffmpeg':
                     cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-                # Check if server cookies file is missing - trigger refresh
+                # Check if server cookies file is missing - trigger refresh and raise 503
                 if self.cookies_file and not os.path.exists(self.cookies_file):
-                    logger.warning(f"⚠️ Cookies file missing: {self.cookies_file}")
+                    logger.warning(f"⚠️ Cookies file missing for account {self.account_id}: {self.cookies_file}")
                     cookie_refresh_service.trigger_cookie_refresh(reason="missing_cookies")
-                    # Don't use user-provided cookies as fallback - wait for refresh
-                    use_cookies_file = None
+                    # Raise 503 to trigger load balancer failover to another server
+                    raise CookieUnavailableError(self.account_id, reason="missing_cookies")
                 # Server cookies exist - use them
                 elif self.cookies_file and os.path.exists(self.cookies_file):
                     use_cookies_file = self.cookies_file
@@ -196,12 +201,12 @@ class YouTubeService:
                 if self.ffmpeg_path != 'ffmpeg':
                     cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-                # Check if server cookies file is missing - trigger refresh
+                # Check if server cookies file is missing - trigger refresh and raise 503
                 if self.cookies_file and not os.path.exists(self.cookies_file):
-                    logger.warning(f"⚠️ Cookies file missing: {self.cookies_file}")
+                    logger.warning(f"⚠️ Cookies file missing for account {self.account_id}: {self.cookies_file}")
                     cookie_refresh_service.trigger_cookie_refresh(reason="missing_cookies")
-                    # Don't use user-provided cookies as fallback - wait for refresh
-                    use_cookies_file = None
+                    # Raise 503 to trigger load balancer failover to another server
+                    raise CookieUnavailableError(self.account_id, reason="missing_cookies")
                 # Server cookies exist - use them
                 elif self.cookies_file and os.path.exists(self.cookies_file):
                     use_cookies_file = self.cookies_file

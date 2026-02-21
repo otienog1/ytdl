@@ -148,3 +148,20 @@ class DatabaseError(AppException):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             details={"operation": operation, "reason": reason}
         )
+
+
+class CookieUnavailableError(YouTubeError):
+    """Raised when cookies are unavailable on this server - triggers load balancer failover"""
+
+    def __init__(self, account_id: str, reason: str = "cookies_unavailable"):
+        super().__init__(
+            message="Authentication cookies unavailable on this server. Please retry your request.",
+            error_code="COOKIES_UNAVAILABLE",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            details={
+                "account_id": account_id,
+                "reason": reason,
+                "retry": True,
+                "message": "This server is refreshing authentication. Your request will be automatically retried on another server."
+            }
+        )

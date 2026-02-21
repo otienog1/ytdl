@@ -39,11 +39,23 @@ class CookieRefreshService:
             return False
 
         try:
+            # Check if refresh already in progress for this account
+            account_id = settings.YT_ACCOUNT_ID
+            refresh_key = f"cookie:refresh:{account_id}:in_progress"
+
+            if self.redis_client.get(refresh_key):
+                logger.info(f"Cookie refresh already in progress for account {account_id}, skipping")
+                return True
+
+            # Set refresh flag with 5-minute expiry (TTL)
+            self.redis_client.setex(refresh_key, 300, "1")
+
             # Create job data
             import time
             job_data = {
                 "reason": reason,
-                "triggered_by": "ytd_backend",
+                "triggered_by": f"server_{account_id}",
+                "account_id": account_id,
                 "timestamp": int(time.time() * 1000)  # Bull uses milliseconds
             }
 
@@ -76,11 +88,17 @@ class CookieRefreshService:
             # Add job ID to wait queue
             self.redis_client.lpush(f"bull:{self.queue_name}:wait", job_id)
 
-            logger.info(f"✅ Cookie refresh job created (ID: {job_id}, reason: {reason})")
+            logger.info(f"✅ Cookie refresh job created (ID: {job_id}, account: {job_data['account_id']}, reason: {reason})")
             return True
 
         except Exception as e:
             logger.error(f"Failed to trigger cookie refresh: {e}")
+            # Clear the refresh flag on error
+            try:
+                account_id = settings.YT_ACCOUNT_ID
+                self.redis_client.delete(f"cookie:refresh:{account_id}:in_progress")
+            except:
+                pass
             return False
 
     def is_cookie_refresh_needed(self, error_message: str) -> bool:
@@ -116,7 +134,7 @@ class CookieRefreshService:
     def check_cookies_file_exists(self) -> bool:
         """Check if cookies file exists"""
         import os
-        cookies_file = os.getenv('YT_DLP_COOKIES_FILE')
+        cookies_file = settings.YT_DLP_COOKIES_FILE
         if not cookies_file:
             return False
         return os.path.exists(cookies_file)

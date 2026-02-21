@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     FFPROBE_PATH: Optional[str] = None
     YT_DLP_PATH: Optional[str] = None
 
+    # YouTube Account Configuration (for multi-server setup)
+    YT_ACCOUNT_ID: str = "default"  # Unique identifier for this server's YouTube account
+    YT_DLP_COOKIES_FILE: Optional[str] = None  # Path to cookies file for this account
+
     model_config = ConfigDict(
         env_file=".env",
         case_sensitive=True,

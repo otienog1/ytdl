@@ -12,7 +12,7 @@ from app.config.database import connect_to_mongo, close_mongo_connection
 from app.config.redis_client import redis_client
 from app.middleware.rate_limit import limiter, _rate_limit_exceeded_handler
 from app.middleware.metrics_middleware import MetricsMiddleware
-from app.routes import download, status as status_routes, history, storage_routes, websocket_routes, admin_routes, cookie_routes
+from app.routes import download, status as status_routes, history, storage_routes, websocket_routes, admin_routes, cookie_routes, health
 from app.utils.logger import logger
 from app.exceptions import AppException
 from prometheus_client import make_asgi_app
@@ -61,16 +61,8 @@ app.add_middleware(
 app.add_middleware(MetricsMiddleware)
 
 
-# Health check
-@app.get("/health")
-async def health_check():
-    return {
-        "status": "ok",
-        "timestamp": __import__('datetime').datetime.utcnow().isoformat()
-    }
-
-
 # Include routers
+app.include_router(health.router, prefix="/api/health", tags=["health"])
 app.include_router(download.router, prefix="/api/download", tags=["download"])
 app.include_router(status_routes.router, prefix="/api/status", tags=["status"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])
