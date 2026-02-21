@@ -161,6 +161,15 @@ class CookieRefreshService:
             logger.error(f"Failed to get queue status: {e}")
             return {"error": str(e)}
 
+    def close(self):
+        """Close Redis connection"""
+        if self.redis_client:
+            try:
+                self.redis_client.close()
+                logger.info("Cookie refresh service Redis connection closed")
+            except Exception as e:
+                logger.error(f"Error closing cookie refresh Redis connection: {e}")
+
 
 # Global singleton instance
 cookie_refresh_service = CookieRefreshService()

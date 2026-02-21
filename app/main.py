@@ -33,8 +33,15 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down...")
-    await close_mongo_connection()
+
+    # Close all Redis connections to prevent leaks
+    from app.services.cookie_refresh_service import cookie_refresh_service
+    from app.websocket import manager
+
+    cookie_refresh_service.close()
+    manager.close()
     await redis_client.close()
+    await close_mongo_connection()
 
 
 app = FastAPI(

@@ -83,6 +83,15 @@ class ConnectionManager:
         for job_id in list(self.active_connections.keys()):
             await self.send_update(job_id, data)
 
+    def close(self):
+        """Close Redis connection"""
+        if self.redis_client:
+            try:
+                self.redis_client.close()
+                logger.info("WebSocket manager Redis connection closed")
+            except Exception as e:
+                logger.error(f"Error closing WebSocket manager Redis connection: {e}")
+
 
 # Global connection manager
 manager = ConnectionManager()
