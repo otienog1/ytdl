@@ -34,15 +34,25 @@ if [ "$EUID" -ne 0 ]; then
     error "Please run as root: sudo bash start-dev.sh"
 fi
 
-# Move app out of /root if needed — the ytd service user cannot access /root
-if [[ "$APP_DIR" == /root* ]]; then
-    warn "App is under /root which is not accessible by the '$APP_USER' service user."
+# Move app to /opt/ytdl if not already there — ensures consistent deployment location
+if [[ "$APP_DIR" != "/opt/ytdl" ]]; then
+    warn "App is at $APP_DIR, moving to /opt/ytdl for production deployment..."
     info "Moving app to /opt/ytdl..."
     mkdir -p /opt/ytdl
+
+    # If /opt/ytdl already exists and has files, back it up
+    if [ -d "/opt/ytdl" ] && [ "$(ls -A /opt/ytdl 2>/dev/null)" ]; then
+        BACKUP_DIR="/opt/ytdl.backup.$(date +%Y%m%d_%H%M%S)"
+        warn "Backing up existing /opt/ytdl to $BACKUP_DIR"
+        mv /opt/ytdl "$BACKUP_DIR"
+        mkdir -p /opt/ytdl
+    fi
+
+    # Copy app to /opt/ytdl
     cp -a "$APP_DIR/." /opt/ytdl/
     APP_DIR="/opt/ytdl"
-    # Remove any copied .venv — it contains hardcoded paths to /root that
-    # the ytd service user cannot access. It will be rebuilt in the new location.
+
+    # Remove any copied .venv — it contains hardcoded paths that need to be rebuilt
     rm -rf "$APP_DIR/.venv"
     log "App moved to $APP_DIR"
 fi
