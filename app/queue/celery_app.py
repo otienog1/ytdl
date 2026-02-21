@@ -18,6 +18,22 @@ celery_app.conf.update(
     task_track_started=True,
     task_time_limit=300,  # 5 minutes
     task_soft_time_limit=240,  # 4 minutes
+
+    # Redis connection pool settings to prevent "max clients reached" error
+    broker_connection_max_retries=3,
+    broker_pool_limit=5,  # Limit connection pool size
+    broker_transport_options={
+        'max_connections': 5,
+        'socket_keepalive': True,
+        'socket_timeout': 5,
+        'socket_connect_timeout': 5,
+    },
+    result_backend_transport_options={
+        'max_connections': 5,
+        'socket_keepalive': True,
+        'socket_timeout': 5,
+        'socket_connect_timeout': 5,
+    },
 )
 
 # Configure periodic cleanup tasks using Celery Beat

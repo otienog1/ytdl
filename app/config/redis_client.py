@@ -13,16 +13,20 @@ class RedisClient:
         return cls._instance
 
     async def connect(self):
-        """Connect to Redis"""
+        """Connect to Redis with connection pooling"""
         try:
             self._client = await redis.from_url(
                 settings.REDIS_URL,
                 encoding="utf-8",
-                decode_responses=True
+                decode_responses=True,
+                max_connections=10,  # Limit connections per client
+                socket_keepalive=True,
+                socket_connect_timeout=5,
+                retry_on_timeout=True
             )
             # Test connection
             await self._client.ping()
-            logger.info("Redis connected successfully")
+            logger.info("Redis connected successfully with connection pooling")
         except Exception as e:
             logger.error(f"Redis connection error: {e}")
             raise
