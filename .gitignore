@@ -135,3 +135,5 @@ dump.rdb
 
 # Misc
 .vercel
+
+*.backup
