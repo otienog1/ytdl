@@ -98,14 +98,21 @@ class YouTubeService:
                 if self.ffmpeg_path != 'ffmpeg':
                     cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-                use_cookies_file = None
-                if self.cookies_file and os.path.exists(self.cookies_file):
+                # Check if server cookies file is missing - trigger refresh
+                if self.cookies_file and not os.path.exists(self.cookies_file):
+                    logger.warning(f"⚠️ Cookies file missing: {self.cookies_file}")
+                    cookie_refresh_service.trigger_cookie_refresh(reason="missing_cookies")
+                    # Don't use user-provided cookies as fallback - wait for refresh
+                    use_cookies_file = None
+                # Server cookies exist - use them
+                elif self.cookies_file and os.path.exists(self.cookies_file):
                     use_cookies_file = self.cookies_file
+                # No server cookies configured, user provided cookies - use them
                 elif cookies:
                     temp_cookies_file = self._create_temp_cookies_file(cookies)
-
-                if temp_cookies_file:
                     use_cookies_file = temp_cookies_file
+                else:
+                    use_cookies_file = None
 
                 if use_cookies_file:
                     cmd.extend(['--cookies', use_cookies_file])
@@ -189,14 +196,21 @@ class YouTubeService:
                 if self.ffmpeg_path != 'ffmpeg':
                     cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
 
-                use_cookies_file = None
-                if self.cookies_file and os.path.exists(self.cookies_file):
+                # Check if server cookies file is missing - trigger refresh
+                if self.cookies_file and not os.path.exists(self.cookies_file):
+                    logger.warning(f"⚠️ Cookies file missing: {self.cookies_file}")
+                    cookie_refresh_service.trigger_cookie_refresh(reason="missing_cookies")
+                    # Don't use user-provided cookies as fallback - wait for refresh
+                    use_cookies_file = None
+                # Server cookies exist - use them
+                elif self.cookies_file and os.path.exists(self.cookies_file):
                     use_cookies_file = self.cookies_file
+                # No server cookies configured, user provided cookies - use them
                 elif cookies:
                     temp_cookies_file = self._create_temp_cookies_file(cookies)
-
-                if temp_cookies_file:
                     use_cookies_file = temp_cookies_file
+                else:
+                    use_cookies_file = None
 
                 if use_cookies_file:
                     cmd.extend(['--cookies', use_cookies_file])
