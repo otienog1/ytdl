@@ -23,9 +23,9 @@ loguru = "*"
 uvicorn = {extras = ["standard"], version = "*"}
 python-jose = {extras = ["cryptography"], version = "*"}
 passlib = {extras = ["bcrypt"], version = "*"}
-boto3
-azure-storage-blob 
-azure-identity
+boto3 = "*"
+azure-storage-blob = "*"
+azure-identity = "*"
 
 [dev-packages]
 
