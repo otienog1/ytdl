@@ -1,5 +1,15 @@
 # Hybrid Redis Deployment - Quick Start
 
+## ⚠️ First Time Setup Required
+
+**Before deploying**, you must create production configuration files locally:
+
+👉 **See [PRODUCTION_CONFIG_SETUP.md](PRODUCTION_CONFIG_SETUP.md) for complete setup instructions**
+
+The `.env.production.server*` files contain sensitive credentials and are **NOT** stored in the repository for security.
+
+---
+
 ## 🚀 Deploy from Your Local Machine (Easiest!)
 
 ### Windows Users

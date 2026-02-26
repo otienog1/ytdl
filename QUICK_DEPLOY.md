@@ -1,5 +1,12 @@
 # Quick Deployment Guide - Hybrid Redis
 
+## ⚠️ Prerequisites
+
+**First time?** You must create production config files locally first:
+👉 [PRODUCTION_CONFIG_SETUP.md](PRODUCTION_CONFIG_SETUP.md)
+
+---
+
 ## 🚀 Deploy from Local Machine (Recommended)
 
 Run this on your **local Windows machine** to deploy to all servers at once:
