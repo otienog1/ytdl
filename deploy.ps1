@@ -105,52 +105,33 @@ foreach ($server in $servers) {
     Write-ServerHeader -Name $server.Name
 
     try {
-        # Build the deployment commands
-        $deployCommands = @'
+        # Build the deployment commands - use string substitution for PowerShell vars
+        $cmd1 = @"
 set -e
-
-# Set non-interactive mode for apt-get
 export DEBIAN_FRONTEND=noninteractive
 
-# Detect if running as root
-if [ "$(id -u)" = "0" ]; then
+if [ "`$(id -u)" = "0" ]; then
     SUDO=""
 else
     SUDO="sudo"
 fi
 
 echo '  [1/10] Checking Python version...'
-PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
+PYTHON_VERSION=`$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
 REQUIRED_VERSION='3.13'
 
-if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$PYTHON_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
-    echo "  Python version is $PYTHON_VERSION, upgrading to 3.13..."
-'@ + @"
-
-
-
-    # Update package list
+if [ "`$(printf '%s\n' "`$REQUIRED_VERSION" "`$PYTHON_VERSION" | sort -V | head -n1)" != "`$REQUIRED_VERSION" ]; then
+    echo "  Python version is `$PYTHON_VERSION, upgrading to 3.13..."
     apt-get update -qq
-
-    # Install software-properties-common for add-apt-repository
     apt-get install -y software-properties-common -qq
-
-    # Add deadsnakes PPA for Python 3.13
     add-apt-repository -y ppa:deadsnakes/ppa
     apt-get update -qq
-
-    # Install Python 3.13 and required packages
     apt-get install -y python3.13 python3.13-venv python3.13-dev python-is-python3 -qq
-
-    # Update alternatives to make python3.13 the default python3
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
     update-alternatives --set python3 /usr/bin/python3.13
-
     echo '  Python upgraded to 3.13'
 else
-    echo "  Python version $PYTHON_VERSION is compatible"
-
-    # Ensure python-is-python3 is installed
+    echo "  Python version `$PYTHON_VERSION is compatible"
     if ! dpkg -l | grep -q python-is-python3; then
         echo '  Installing python-is-python3 package...'
         apt-get update -qq
@@ -198,7 +179,7 @@ fi
 
         Write-Step "  Executing deployment commands..."
 
-        $result = Invoke-SSHCommand -SSHHost $server.Host -Command $deployCommands -SSHKey $server.SSHKey
+        $result = Invoke-SSHCommand -SSHHost $server.Host -Command $cmd1 -SSHKey $server.SSHKey
 
         if ($result.ExitCode -eq 0) {
             Write-Success "  Deployment to $($server.Name) completed successfully"
