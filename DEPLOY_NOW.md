@@ -8,13 +8,15 @@ The server had a "divergent branches" error which has been fixed. The server is 
 
 ## 🚀 Deploy to All Servers
 
+**Deployment scripts are now in the `backend-python/` directory**
+
 You have **two options** to deploy:
 
 ### Option 1: PowerShell (Recommended for Windows)
 
 **Just double-click:**
 ```
-deploy-from-local.bat
+backend-python\deploy-from-local.bat
 ```
 
 This will run the PowerShell deployment script which:
@@ -27,7 +29,7 @@ This will run the PowerShell deployment script which:
 
 If you prefer bash (Git Bash/WSL):
 ```bash
-bash deploy-from-local.sh
+bash backend-python/deploy-from-local.sh
 ```
 
 ---
@@ -130,7 +132,7 @@ This will check:
 
 ### Deploy to all servers:
 ```bash
-deploy-from-local.bat
+backend-python\deploy-from-local.bat
 ```
 
 ### Check server status:
@@ -172,5 +174,5 @@ curl https://ytd.timobosafaris.com/api/health/
 
 **Ready to deploy?** Just run:
 ```
-deploy-from-local.bat
+backend-python\deploy-from-local.bat
 ```
