@@ -1,35 +1,48 @@
 # YouTube Downloader - Deployment Script (PowerShell)
 # Deploys code from GitHub to production servers
 
-param(
-    [string]$SSHKey = ""
-)
-
 $ErrorActionPreference = "Stop"
 
-# Server configurations
-$servers = @(
-    @{
-        ServerHost = "ytd.timobosafaris.com"
-        Name = "Linode"
-        User = "root"
-    },
-    @{
-        ServerHost = "35.193.12.77"
-        Name = "GCP"
-        User = "root"
-    },
-    @{
-        ServerHost = "13.60.71.187"
-        Name = "AWS"
-        User = "root"
+# ===================================================================
+# LOAD SERVER CONFIGURATION
+# ===================================================================
+$configPath = Join-Path $PSScriptRoot "deploy-config.json"
+
+if (-not (Test-Path $configPath)) {
+    Write-Host "[ERROR] Configuration file not found: $configPath" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Please create deploy-config.json with your server details"
+    Write-Host ""
+    pause
+    exit 1
+}
+
+$config = Get-Content $configPath | ConvertFrom-Json
+
+# Build servers array from config
+$servers = @()
+foreach ($server in $config.servers) {
+    $sshKey = if ($server.sshKey) {
+        # Expand environment variables in the path
+        [System.Environment]::ExpandEnvironmentVariables($server.sshKey)
+    } else {
+        $null
     }
-)
+
+    $servers += @{
+        Host = $server.host
+        Name = $server.name
+        SSHKey = $sshKey
+    }
+}
 
 $deployPath = "/opt/ytdl"
 $branch = "main"
 
-# Colors for output
+# ===================================================================
+# FUNCTIONS
+# ===================================================================
+
 function Write-Header {
     param([string]$Text)
     Write-Host ""
@@ -55,9 +68,9 @@ function Write-Error-Message {
 }
 
 function Write-ServerHeader {
-    param([string]$Name, [string]$ServerHost)
+    param([string]$Name)
     Write-Host ""
-    Write-Host ">>> Deploying to $Name ($ServerHost)..." -ForegroundColor Yellow
+    Write-Host ">>> Deploying to $Name..." -ForegroundColor Yellow
 }
 
 # Function to execute SSH command
@@ -65,33 +78,31 @@ function Invoke-SSHCommand {
     param(
         [string]$SSHHost,
         [string]$Command,
-        [string]$SSHKey = ""
+        [string]$SSHKey = $null
     )
 
-    $sshArgs = if ($SSHKey) {
-        @("-i", $SSHKey, $SSHHost, $Command)
+    if ($SSHKey -and (Test-Path $SSHKey)) {
+        $result = ssh -o StrictHostKeyChecking=no -i "$SSHKey" $SSHHost $Command 2>&1
     } else {
-        @($SSHHost, $Command)
+        $result = ssh -o StrictHostKeyChecking=no $SSHHost $Command 2>&1
     }
 
-    $result = & ssh @sshArgs 2>&1
-    $exitCode = $LASTEXITCODE
-
     return @{
-        ExitCode = $exitCode
+        ExitCode = $LASTEXITCODE
         Output = $result
     }
 }
 
-# Main deployment
+# ===================================================================
+# MAIN DEPLOYMENT
+# ===================================================================
+
 Write-Header "YouTube Downloader - Deployment Script"
 
 $failedServers = @()
 
 foreach ($server in $servers) {
-    Write-ServerHeader -Name $server.Name -ServerHost $server.ServerHost
-
-    $sshHost = "$($server.User)@$($server.ServerHost)"
+    Write-ServerHeader -Name $server.Name
 
     try {
         # Build the deployment commands
@@ -117,22 +128,17 @@ systemctl restart ytd-api ytd-worker
 echo '  [6/6] Checking service status...'
 sleep 3
 if systemctl is-active --quiet ytd-api && systemctl is-active --quiet ytd-worker; then
-    echo '  [OK] Services running successfully'
+    echo '  Services running successfully'
 else
-    echo '  [ERROR] Services failed to start'
+    echo '  ERROR: Services failed to start'
     systemctl status ytd-api ytd-worker --no-pager
     exit 1
 fi
 "@
 
-        Write-Step "  [1/6] Navigating to deployment directory..."
-        Write-Step "  [2/6] Pulling latest code from GitHub..."
-        Write-Step "  [3/6] Fixing ownership..."
-        Write-Step "  [4/6] Installing/updating dependencies..."
-        Write-Step "  [5/6] Restarting services..."
-        Write-Step "  [6/6] Checking service status..."
+        Write-Step "  Executing deployment commands..."
 
-        $result = Invoke-SSHCommand -SSHHost $sshHost -Command $deployCommands -SSHKey $SSHKey
+        $result = Invoke-SSHCommand -SSHHost $server.Host -Command $deployCommands -SSHKey $server.SSHKey
 
         if ($result.ExitCode -eq 0) {
             Write-Success "  Deployment to $($server.Name) completed successfully"
@@ -151,7 +157,10 @@ fi
     Write-Host ""
 }
 
-# Summary
+# ===================================================================
+# SUMMARY
+# ===================================================================
+
 Write-Header "Deployment Summary"
 
 if ($failedServers.Count -eq 0) {

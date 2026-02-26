@@ -1,0 +1,25 @@
+{
+  "servers": [
+    {
+      "id": 1,
+      "host": "root@172.234.172.191",
+      "name": "ytd.timobosafaris.com (172.234.172.191)",
+      "account": "Account A (otienog1@yahoo.com)",
+      "sshKey": null
+    },
+    {
+      "id": 2,
+      "host": "7plus8@35.193.12.77",
+      "name": "GCP 35.193.12.77",
+      "account": "Account B (otienog1@icluod.com)",
+      "sshKey": "%USERPROFILE%\\.ssh\\google_compute_engine"
+    },
+    {
+      "id": 3,
+      "host": "admin@13.60.71.187",
+      "name": "AWS 13.60.71.187",
+      "account": "Account C (7plus8studios@gmail.com)",
+      "sshKey": "%USERPROFILE%\\.ssh\\ytdl_key1.pem"
+    }
+  ]
+}

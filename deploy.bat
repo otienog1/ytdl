@@ -6,12 +6,8 @@ echo.
 echo Starting deployment...
 echo.
 
-REM Check if SSH key is provided as argument
-if "%~1"=="" (
-    powershell.exe -ExecutionPolicy Bypass -File "%~dp0deploy.ps1"
-) else (
-    powershell.exe -ExecutionPolicy Bypass -File "%~dp0deploy.ps1" -SSHKey "%~1"
-)
+REM Run the PowerShell deployment script
+powershell.exe -ExecutionPolicy Bypass -File "%~dp0deploy.ps1"
 
 REM Capture exit code
 set DEPLOY_EXIT_CODE=%ERRORLEVEL%
