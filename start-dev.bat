@@ -1,118 +1,99 @@
 @echo off
-REM YouTube Shorts Downloader - Start Development Servers
-REM This script starts both backend and frontend servers
-
-echo.
-echo ============================================
-echo YouTube Shorts Downloader - Development Mode
-echo ============================================
+echo Starting YouTube Shorts Downloader Python Backend...
 echo.
 
-REM Check if Node.js is installed
-where node >nul 2>nul
-if %errorlevel% neq 0 (
-    echo ERROR: Node.js is not installed or not in PATH
-    echo Please install Node.js from https://nodejs.org
-    pause
-    exit /b 1
+REM Check if using pipenv or venv
+where pipenv >nul 2>nul
+if %errorlevel% equ 0 (
+    echo Using pipenv...
+    set USE_PIPENV=1
+) else (
+    echo Using venv...
+    set USE_PIPENV=0
 )
 
-echo Node.js found:
-node -v
-echo.
+if %USE_PIPENV% equ 0 (
+    REM Standard venv setup
+    if not exist "venv\" (
+        echo Creating virtual environment...
+        python -m venv venv
+    )
 
-REM Check if npm is installed
-where npm >nul 2>nul
-if %errorlevel% neq 0 (
-    echo ERROR: npm is not installed or not in PATH
-    pause
-    exit /b 1
+    echo Activating virtual environment...
+    call venv\Scripts\activate
+
+    echo Installing dependencies...
+    pip install -r requirements.txt
+) else (
+    REM Pipenv setup
+    echo Installing dependencies with pipenv...
+    pipenv install
 )
 
-echo npm found:
-npm -v
-echo.
-
-REM Check if yt-dlp is installed
-where yt-dlp >nul 2>nul
-if %errorlevel% neq 0 (
-    echo WARNING: yt-dlp is not installed or not in PATH
-    echo Video downloads will not work without yt-dlp
-    echo Install from: https://github.com/yt-dlp/yt-dlp
+REM Setup local ffmpeg if not already done
+if not exist "bin\ffmpeg.exe" (
     echo.
-)
-
-REM Check if ffmpeg is installed
-where ffmpeg >nul 2>nul
-if %errorlevel% neq 0 (
-    echo WARNING: ffmpeg is not installed or not in PATH
-    echo Video processing will not work without ffmpeg
-    echo Install from: https://ffmpeg.org
-    echo.
-)
-
-REM Check if backend dependencies are installed
-if not exist "backend\node_modules\" (
-    echo Installing backend dependencies...
-    cd backend
-    call npm install
-    cd ..
-    echo.
-)
-
-REM Check if frontend dependencies are installed
-if not exist "frontend\node_modules\" (
-    echo Installing frontend dependencies...
-    cd frontend
-    call npm install
-    cd ..
-    echo.
-)
-
-REM Check if .env files exist
-if not exist "backend\.env" (
-    echo WARNING: backend\.env not found
-    echo Creating from example...
-    copy backend\.env.example backend\.env
-    echo Please edit backend\.env with your configuration
-    echo.
-)
-
-if not exist "frontend\.env.local" (
-    echo WARNING: frontend\.env.local not found
-    echo Creating from example...
-    copy frontend\.env.example frontend\.env.local
-    echo Please edit frontend\.env.local with your configuration
-    echo.
+    echo Setting up local ffmpeg binaries...
+    if %USE_PIPENV% equ 1 (
+        pipenv run python setup_ffmpeg.py
+    ) else (
+        python setup_ffmpeg.py
+    )
 )
 
 echo.
-echo Starting servers...
+echo ========================================
+echo Starting FastAPI server on port 3001...
+echo ========================================
 echo.
-echo Backend will start on: http://localhost:3001
-echo Frontend will start on: http://localhost:3000
-echo.
-echo Press Ctrl+C in each window to stop the servers
-echo.
-pause
 
-REM Start backend in new window
-start "YouTube Downloader - Backend" cmd /k "cd backend && npm run dev"
+REM Start FastAPI server with hot reload
+if %USE_PIPENV% equ 1 (
+    start "FastAPI Server" cmd /k "pipenv run uvicorn app.main:app --reload --port 3001"
+) else (
+    start "FastAPI Server" cmd /k "venv\Scripts\activate && uvicorn app.main:app --reload --port 3001"
+)
 
-REM Wait a bit for backend to start
-timeout /t 3 /nobreak >nul
-
-REM Start frontend in new window
-start "YouTube Downloader - Frontend" cmd /k "cd frontend && npm run dev"
+REM Wait a moment for server to start
+timeout /t 3 /nobreak > nul
 
 echo.
-echo ============================================
-echo Servers are starting in separate windows
-echo ============================================
+echo ========================================
+echo Starting Celery worker...
+echo ========================================
 echo.
-echo Backend: http://localhost:3001/health
-echo Frontend: http://localhost:3000
+
+REM Start Celery worker in new window
+if %USE_PIPENV% equ 1 (
+    start "Celery Worker" cmd /k "pipenv run celery -A app.queue.celery_app worker --loglevel=info --pool=solo"
+) else (
+    start "Celery Worker" cmd /k "venv\Scripts\activate && celery -A app.queue.celery_app worker --loglevel=info --pool=solo"
+)
+
+REM Wait a moment for worker to start
+timeout /t 2 /nobreak > nul
+
 echo.
-echo Close those windows to stop the servers
+echo ========================================
+echo Starting Celery Beat (Scheduler)...
+echo ========================================
 echo.
-pause
+
+REM Start Celery Beat for scheduled cleanup tasks
+if %USE_PIPENV% equ 1 (
+    start "Celery Beat" cmd /k "pipenv run celery -A app.queue.celery_app beat --loglevel=info"
+) else (
+    start "Celery Beat" cmd /k "venv\Scripts\activate && celery -A app.queue.celery_app beat --loglevel=info"
+)
+
+echo.
+echo ========================================
+echo Backend services started!
+echo ========================================
+echo FastAPI Server: http://localhost:3001
+echo API Docs: http://localhost:3001/docs
+echo Celery Worker: Processing download tasks
+echo Celery Beat: Running cleanup tasks every 6-12 hours
+echo.
+echo Press any key to stop all services...
+pause > nul

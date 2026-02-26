@@ -1,0 +1,34 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+fastapi = "*"
+python-multipart = "*"
+pymongo = "*"
+motor = "*"
+redis = "*"
+celery = "*"
+flower = "*"
+yt-dlp = "*"
+ffmpeg-python = "*"
+static-ffmpeg = "*"
+google-cloud-storage = "*"
+python-dotenv = "*"
+pydantic = "*"
+pydantic-settings = "*"
+slowapi = "*"
+loguru = "*"
+uvicorn = {extras = ["standard"], version = "*"}
+python-jose = {extras = ["cryptography"], version = "*"}
+passlib = {extras = ["bcrypt"], version = "*"}
+boto3 = "*"
+azure-storage-blob= "*"
+azure-identity = "*"
+aiosmtplib = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"

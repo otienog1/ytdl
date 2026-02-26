@@ -1,229 +1,221 @@
-# YouTube Shorts Downloader
+# YouTube Shorts Downloader - Python FastAPI Backend
 
-A complete YouTube Shorts downloader solution with frontend, backend, and residential proxy components.
+FastAPI backend for YouTube Shorts downloader with Celery task queue.
 
-## Quick Start
+## Prerequisites
 
-**Just need the proxy?** → [local-proxy/QUICKSTART.md](local-proxy/QUICKSTART.md) (5-minute setup)
+- Python 3.11+
+- Redis (using Redis Cloud - already configured)
+- MongoDB (using MongoDB Atlas - already configured)
+- Google Cloud Storage account (already configured)
 
-**Full deployment guide:** → [START_HERE.md](START_HERE.md)
+**Note**: yt-dlp and ffmpeg will be installed **locally in the project** - no system-wide installation needed!
 
-## Architecture Overview
+## Quick Start (Recommended)
 
-This project consists of **three separate applications** that work together:
+The easiest way to get started - everything is automated:
 
-```
-┌─────────────────┐
-│   Frontend      │  Next.js web app (users interact here)
-│  (Next.js/React)│  https://ytd.timobosafaris.com
-└────────┬────────┘
-         │ API requests
-         ↓
-┌─────────────────┐
-│   Backend       │  FastAPI + Celery (cloud server)
-│ (Python/FastAPI)│  172.234.172.191
-└────────┬────────┘
-         │ SOCKS5 proxy
-         ↓
-┌─────────────────┐
-│  Local Proxy    │  SOCKS5 server (YOUR home computer)
-│   (Node.js)     │  Residential IP
-└────────┬────────┘
-         │
-         ↓
-    YouTube Servers
+### Windows
+```powershell
+cd c:\Users\7plus8\build\ytd\backend-python
+.\start-dev.bat
 ```
 
-## Why Three Separate Applications?
+### macOS/Linux
+```bash
+cd /path/to/backend-python
+./start-dev.sh
+```
 
-### 1. Frontend ([frontend/](frontend/))
-- **Technology**: Next.js 14, React, TypeScript, TailwindCSS
-- **Deployment**: Vercel or cloud server
-- **Purpose**: User-facing web application
-- **URL**: https://ytd.timobosafaris.com
+This will automatically:
+1. Create Python virtual environment
+2. Install all dependencies (including yt-dlp)
+3. Download and setup ffmpeg locally
+4. Start FastAPI server on port 3001
+5. Start Celery worker for background jobs
 
-[→ Frontend README](frontend/README.md)
+**See [LOCAL_INSTALL.md](LOCAL_INSTALL.md) for details on local installation.**
 
-### 2. Backend ([backend-python/](backend-python/))
-- **Technology**: Python, FastAPI, Celery, Redis, MongoDB
-- **Deployment**: Cloud server (172.234.172.191)
-- **Purpose**: API server and video processing with yt-dlp
+## Manual Installation
 
-[→ Backend README](backend-python/README.md) | [→ Deployment Guide](backend-python/DEPLOYMENT.md)
+### 1. Create Virtual Environment
 
-### 3. Local Proxy ([local-proxy/](local-proxy/)) ⭐ REQUIRED FOR SHORTS
-- **Technology**: Node.js, SOCKS5
-- **Deployment**: YOUR home computer
-- **Purpose**: Route requests through residential IP to bypass YouTube's datacenter IP blocking
+```bash
+python -m venv venv
 
-This is a **standalone application** - you run it on your home computer, completely separate from the backend and frontend.
+# Windows
+venv\Scripts\activate
 
-[→ Proxy README](local-proxy/README.md) | [→ Quick Start](local-proxy/QUICKSTART.md)
+# macOS/Linux
+source venv/bin/activate
+```
 
-## Quick Setup Guide
+### 2. Install Dependencies
 
-### Option A: Just the Proxy (Backend Already Running)
+```bash
+pip install -r requirements.txt
+```
 
-If your backend is already deployed but facing YouTube bot detection errors:
+### 3. Setup Local yt-dlp and ffmpeg
 
-1. **Run the proxy on your computer:**
-   ```bash
-   cd local-proxy
-   npm install
-   node simple-proxy.js --port 1080 --auth myuser:mypass123
-   ```
+**yt-dlp** is already included in `requirements.txt` and will be installed in your virtual environment.
 
-2. **Configure router port forwarding** (forward port 1080)
+**ffmpeg** can be set up locally (no system installation needed):
 
-3. **Update backend to use proxy:**
-   ```bash
-   ssh root@172.234.172.191
-   sudo nano /opt/ytd/backend-python/.env.production
-   # Add: YT_DLP_PROXY=socks5://myuser:mypass123@YOUR_PUBLIC_IP:1080
-   sudo systemctl restart ytd-api ytd-worker
-   ```
+```bash
+python setup_ffmpeg.py
+```
 
-See [local-proxy/QUICKSTART.md](local-proxy/QUICKSTART.md) for detailed instructions.
+This downloads ffmpeg binaries to `backend-python/bin/` and configures them automatically.
 
-### Option B: Full Stack Deployment
+**Alternative**: Install system-wide (not recommended):
+- Windows: `winget install Gyan.FFmpeg`
+- macOS: `brew install ffmpeg`
+- Linux: `sudo apt install ffmpeg`
 
-See [START_HERE.md](START_HERE.md) for complete deployment of all three components.
+### 4. Configure Environment
 
-## Technology Stack
+Create `.env` file (use `.env.example` as template):
 
-**Frontend:**
-- Next.js 14, React 18, TypeScript
-- TailwindCSS, Shadcn/ui
-- React Query, Axios
+```env
+MONGODB_URI=your_mongodb_uri
+REDIS_URL=your_redis_url
+GCP_PROJECT_ID=your_gcp_project
+GCP_BUCKET_NAME=your_bucket_name
+GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
+PORT=3001
+ENVIRONMENT=development
+CORS_ORIGINS=http://localhost:3000
+```
 
-**Backend:**
-- Python 3.11, FastAPI, Celery
-- Redis, MongoDB Atlas
-- yt-dlp, ffmpeg
-- Google Cloud Storage
+## Running the Application
 
-**Proxy:**
-- Node.js
-- socksv5 (SOCKS5 protocol)
+### Start FastAPI Server
+
+```bash
+# Development
+uvicorn app.main:app --reload --port 3001
+
+# Or using Python
+python -m app.main
+```
+
+### Start Celery Worker
+
+In a separate terminal:
+
+```bash
+celery -A app.queue.celery_app worker --loglevel=info --pool=solo
+```
+
+Note: On Windows, use `--pool=solo` option.
+
+### Optional: Start Flower (Celery Monitoring)
+
+```bash
+celery -A app.queue.celery_app flower
+```
+
+Access at: http://localhost:5555
+
+## API Endpoints
+
+### Health Check
+```
+GET /health
+```
+
+### Download Video
+```
+POST /api/download
+Body: {"url": "https://youtube.com/shorts/VIDEO_ID"}
+```
+
+### Get Status
+```
+GET /api/status/{job_id}
+```
+
+### Get History
+```
+GET /api/history?limit=10
+```
+
+## Docker
+
+### Build
+
+```bash
+docker build -t youtube-shorts-downloader-python .
+```
+
+### Run
+
+```bash
+docker run -p 3001:3001 --env-file .env youtube-shorts-downloader-python
+```
 
 ## Project Structure
 
 ```
-ytd/
-├── frontend/              # Next.js web application
-│   ├── app/              # Next.js 14 app directory
-│   ├── components/       # React components
-│   ├── lib/             # API client and utilities
-│   └── README.md
-│
-├── backend-python/       # Python backend API
-│   ├── app/
-│   │   ├── routes/      # FastAPI endpoints
-│   │   ├── services/    # Business logic (yt-dlp, GCS)
-│   │   ├── queue/       # Celery tasks
-│   │   └── utils/       # Utilities
-│   ├── DEPLOYMENT.md    # Deployment guide
-│   └── README.md
-│
-└── local-proxy/          # ⭐ Residential proxy (STANDALONE)
-    ├── simple-proxy.js  # SOCKS5 server
-    ├── package.json
-    ├── QUICKSTART.md    # 5-minute setup guide
-    └── README.md        # Full documentation
+backend-python/
+├── app/
+│   ├── config/          # Configuration (settings, database, redis, storage)
+│   ├── models/          # Pydantic models
+│   ├── routes/          # API routes
+│   ├── services/        # Business logic (YouTube, storage)
+│   ├── queue/           # Celery tasks
+│   ├── middleware/      # Rate limiting, CORS
+│   ├── utils/           # Utilities (logger, validators)
+│   └── main.py          # FastAPI application
+├── downloads/           # Temporary video storage
+├── logs/                # Application logs
+├── requirements.txt     # Python dependencies
+├── Dockerfile          # Docker configuration
+└── .env                # Environment variables
 ```
 
-## Important: Bypassing YouTube Bot Detection
+## Differences from Node.js Version
 
-YouTube **blocks datacenter/cloud server IPs** from downloading Shorts videos. You'll see errors like:
+1. **FastAPI** instead of Express.js
+2. **Celery** instead of Bull for task queue
+3. **Motor** (async MongoDB driver) instead of Mongoose
+4. **Pydantic** for data validation instead of Zod
+5. **Loguru** for logging instead of Winston
+6. **SlowAPI** for rate limiting instead of express-rate-limit
 
+## Features
+
+- ✅ Async/await support throughout
+- ✅ Celery task queue with Redis
+- ✅ MongoDB async operations
+- ✅ Type hints and Pydantic validation
+- ✅ Rate limiting
+- ✅ CORS support
+- ✅ Google Cloud Storage integration
+- ✅ Automatic API documentation (Swagger UI at /docs)
+- ✅ Error handling and logging
+
+## API Documentation
+
+Once running, visit:
+- Swagger UI: http://localhost:3001/docs
+- ReDoc: http://localhost:3001/redoc
+
+## Troubleshooting
+
+### Celery won't start on Windows
+Use `--pool=solo` option:
+```bash
+celery -A app.queue.celery_app worker --loglevel=info --pool=solo
 ```
-Sign in to confirm you're not a bot
-```
 
-**You have TWO solutions:**
+### ModuleNotFoundError
+Make sure you're in the project root and virtual environment is activated.
 
-### Option 1: Cookie Authentication ⭐ RECOMMENDED
+### Redis connection error
+Verify REDIS_URL in `.env` and ensure Redis is running.
 
-Use the **standalone cookie extractor** to extract your YouTube cookies:
+## Production Deployment
 
-1. Run cookie extractor on your computer
-2. Upload cookies to server
-3. yt-dlp uses your cookies for authentication
-
-**Pros:** Simple, no port forwarding, no network issues
-**Cons:** Cookies expire every 30-90 days (just re-run the tool)
-
-[→ Cookie Extractor Quick Start](cookie-extractor/QUICKSTART.md)
-
-### Option 2: Residential Proxy
-
-Use the **local proxy** to route requests through your home internet:
-
-1. Run proxy on your home computer
-2. Configure router port forwarding
-3. Server connects through your residential IP
-
-**Pros:** Longer lasting solution
-**Cons:** Requires port forwarding, network configuration, may be blocked by ISP
-
-[→ Local Proxy Quick Start](local-proxy/QUICKSTART.md)
-
-## Common Issues & Solutions
-
-### "Bot detection" / "Sign in to confirm"
-**Solution 1 (Easier)**: Use cookie extractor → [cookie-extractor/QUICKSTART.md](cookie-extractor/QUICKSTART.md)
-**Solution 2 (Advanced)**: Setup local proxy → [local-proxy/QUICKSTART.md](local-proxy/QUICKSTART.md)
-
-### "Connection refused" from backend to proxy
-**Causes**: Proxy not running, port forwarding not configured, wrong IP/credentials
-**Solution**: Switch to cookie authentication or see [local-proxy/README.md#troubleshooting](local-proxy/README.md#troubleshooting)
-
-### Cookies expire
-**Solution**: Re-run cookie extractor (takes 2 minutes)
-
-## Documentation
-
-Each component has detailed setup instructions:
-
-### Frontend
-- [Frontend README](frontend/README.md) - React/Next.js setup and development
-
-### Backend
-- [Backend README](backend-python/README.md) - Python/FastAPI setup
-- [Deployment Guide](backend-python/DEPLOYMENT.md) - Production deployment
-
-### Cookie Extractor ⭐ RECOMMENDED
-- [Cookie Extractor Quick Start](cookie-extractor/QUICKSTART.md) - 3-minute setup
-- [Cookie Extractor README](cookie-extractor/README.md) - Full documentation
-
-### Local Proxy (Alternative)
-- [Proxy Quick Start](local-proxy/QUICKSTART.md) - 5-minute setup
-- [Proxy README](local-proxy/README.md) - Complete documentation
-
-### General
-- [START_HERE.md](START_HERE.md) - Complete setup guide for all components
-
-## Legal Considerations
-
-This tool should only be used for:
-- Downloading your own content
-- Content you have permission to download
-- Educational and personal use
-
-**Do not use this tool to:**
-- Violate YouTube's Terms of Service
-- Infringe on copyright
-- Redistribute downloaded content
-- Commercial purposes without proper licensing
-
-## License
-
-MIT License - See LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request.
-
-## Support
-
-For issues and questions, please open an issue on GitHub.
+See main [DEPLOYMENT.md](../DEPLOYMENT.md) for production deployment instructions.

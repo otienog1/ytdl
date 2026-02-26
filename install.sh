@@ -1,188 +1,558 @@
 #!/bin/bash
-
-# YouTube Shorts Downloader - Installation Script
-# This script automates the setup process
+# YouTube Shorts Downloader - Complete Backend Installation Script
+# Run as root on a fresh Ubuntu/Debian server
+# Usage: sudo bash install.sh
+#
+# This script combines functionality from:
+# - start-dev.sh: Main installation and setup
+# - check-gcs.sh: GCS configuration verification
+# - fix-nodejs-path.sh: Node.js PATH configuration
+# - deploy-files.sh: File deployment utilities
+# - deploy-update.sh: Update deployment
 
 set -e
 
-echo "🚀 YouTube Shorts Downloader - Installation Script"
-echo "=================================================="
-echo ""
-
-# Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+BLUE='\033[0;34m'
+NC='\033[0m'
 
-# Check if running on supported OS
-if [[ "$OSTYPE" != "linux-gnu"* ]] && [[ "$OSTYPE" != "darwin"* ]]; then
-    echo -e "${RED}⚠️  This script is designed for Linux and macOS${NC}"
-    echo "For Windows, please follow the manual setup in README.md"
-    exit 1
+log()   { echo -e "${GREEN}[✓]${NC} $1"; }
+warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
+info()  { echo -e "${BLUE}[→]${NC} $1"; }
+error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
+
+clear
+echo ""
+echo "============================================================"
+echo "  YouTube Shorts Downloader - Backend Installation"
+echo "============================================================"
+echo ""
+
+# ------------------------------------------------------------
+# 1. Check root
+# ------------------------------------------------------------
+if [ "$EUID" -ne 0 ]; then
+    error "Please run as root: sudo bash install.sh"
 fi
 
-echo "Step 1: Checking prerequisites..."
-echo "=================================="
+# ------------------------------------------------------------
+# 2. Get configuration from user
+# ------------------------------------------------------------
+info "Please provide the following configuration details:"
+echo ""
 
-# Check Node.js
-if ! command -v node &> /dev/null; then
-    echo -e "${RED}❌ Node.js is not installed${NC}"
-    echo "Please install Node.js 18+ from https://nodejs.org"
-    exit 1
+read -p "Domain name (e.g., ytd.timobosafaris.com): " DOMAIN_NAME
+read -p "MongoDB URI: " MONGODB_URI
+read -p "Redis URL: " REDIS_URL
+read -p "GCP Project ID: " GCP_PROJECT_ID
+read -p "GCP Bucket Name: " GCP_BUCKET_NAME
+read -p "Frontend CORS Origins (comma-separated, e.g., https://ytd-bay.vercel.app): " CORS_ORIGINS
+
+echo ""
+read -p "Do you want to set up SSL with Let's Encrypt? (y/n): " SETUP_SSL
+if [ "$SETUP_SSL" == "y" ]; then
+    read -p "Email for Let's Encrypt notifications: " SSL_EMAIL
+fi
+
+echo ""
+read -p "Do you have a proxy for YouTube downloads? (y/n): " HAS_PROXY
+if [ "$HAS_PROXY" == "y" ]; then
+    read -p "Proxy URL (e.g., socks5://user:pass@host:port or http://user:pass@host:port): " PROXY_URL
 else
-    NODE_VERSION=$(node -v)
-    echo -e "${GREEN}✅ Node.js ${NODE_VERSION} installed${NC}"
+    PROXY_URL=""
 fi
 
-# Check npm
-if ! command -v npm &> /dev/null; then
-    echo -e "${RED}❌ npm is not installed${NC}"
-    exit 1
+echo ""
+info "Configuration summary:"
+echo "  Domain: $DOMAIN_NAME"
+echo "  SSL: $SETUP_SSL"
+echo "  Proxy: ${PROXY_URL:-None}"
+echo ""
+read -p "Proceed with installation? (y/n): " CONFIRM
+if [ "$CONFIRM" != "y" ]; then
+    error "Installation cancelled"
+fi
+
+# ------------------------------------------------------------
+# 3. System Updates and Dependencies
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 1: Installing System Dependencies"
+echo "============================================================"
+echo ""
+
+info "Updating system packages..."
+apt-get update -qq
+apt-get upgrade -y -qq
+
+info "Installing required packages..."
+apt-get install -y -qq \
+    python3 \
+    python3-pip \
+    python3-venv \
+    ffmpeg \
+    nginx \
+    curl \
+    git \
+    wget \
+    certbot \
+    python3-certbot-nginx \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    python3-dev
+
+# Install Node.js 20 LTS (required for yt-dlp JavaScript runtime)
+if ! command -v node &> /dev/null || [ "$(node -v | cut -d'.' -f1 | tr -d 'v')" -lt 18 ]; then
+    info "Installing Node.js 20 LTS..."
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y -qq nodejs
+fi
+
+NODE_PATH=$(which node)
+NODE_DIR=$(dirname "$NODE_PATH")
+log "Node.js installed: $(node --version) at $NODE_PATH"
+
+log "System dependencies installed"
+
+# ------------------------------------------------------------
+# 4. Install pipenv
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 2: Installing pipenv"
+echo "============================================================"
+echo ""
+
+info "Installing pipenv..."
+apt-get install -y -qq pipenv || pip3 install --break-system-packages pipenv
+log "Pipenv installed"
+
+# ------------------------------------------------------------
+# 5. Create Application User
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 3: Creating Application User"
+echo "============================================================"
+echo ""
+
+APP_USER="ytd"
+if id "$APP_USER" &>/dev/null; then
+    warn "User '$APP_USER' already exists"
 else
-    NPM_VERSION=$(npm -v)
-    echo -e "${GREEN}✅ npm ${NPM_VERSION} installed${NC}"
+    info "Creating user '$APP_USER'..."
+    useradd -m -s /bin/bash "$APP_USER"
+    log "User '$APP_USER' created"
 fi
 
-# Check yt-dlp
-if ! command -v yt-dlp &> /dev/null; then
-    echo -e "${YELLOW}⚠️  yt-dlp is not installed${NC}"
-    echo "Installing yt-dlp..."
+# ------------------------------------------------------------
+# 6. Setup Application Directory
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 4: Setting Up Application"
+echo "============================================================"
+echo ""
 
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        if command -v brew &> /dev/null; then
-            brew install yt-dlp
-        else
-            echo -e "${RED}❌ Homebrew not found. Please install yt-dlp manually${NC}"
-            exit 1
-        fi
-    else
-        sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-        sudo chmod a+rx /usr/local/bin/yt-dlp
+APP_DIR="/opt/ytdl"
+CURRENT_DIR=$(pwd)
+
+info "Setting up application directory at $APP_DIR..."
+
+# If current directory is not /opt/ytdl, copy files there
+if [ "$CURRENT_DIR" != "$APP_DIR" ]; then
+    if [ -d "$APP_DIR" ]; then
+        warn "Directory $APP_DIR already exists, backing up..."
+        mv "$APP_DIR" "${APP_DIR}.backup.$(date +%s)"
     fi
-    echo -e "${GREEN}✅ yt-dlp installed${NC}"
+
+    mkdir -p "$APP_DIR"
+    info "Copying application files..."
+    cp -r . "$APP_DIR/"
+    cd "$APP_DIR"
 else
-    echo -e "${GREEN}✅ yt-dlp installed${NC}"
+    info "Already in $APP_DIR"
 fi
 
-# Check ffmpeg
-if ! command -v ffmpeg &> /dev/null; then
-    echo -e "${YELLOW}⚠️  ffmpeg is not installed${NC}"
-    echo "Installing ffmpeg..."
+# Set permissions
+chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+chmod -R 755 "$APP_DIR"
 
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        if command -v brew &> /dev/null; then
-            brew install ffmpeg
-        else
-            echo -e "${RED}❌ Homebrew not found. Please install ffmpeg manually${NC}"
-            exit 1
-        fi
-    else
-        sudo apt-get update
-        sudo apt-get install -y ffmpeg
-    fi
-    echo -e "${GREEN}✅ ffmpeg installed${NC}"
-else
-    echo -e "${GREEN}✅ ffmpeg installed${NC}"
+log "Application directory set up"
+
+# ------------------------------------------------------------
+# 7. Install Python Dependencies
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 5: Installing Python Dependencies"
+echo "============================================================"
+echo ""
+
+info "Installing Python dependencies with pipenv..."
+
+# Force pipenv to create venv in project
+export PIPENV_VENV_IN_PROJECT=1
+
+# Remove old venv if exists
+if [ -d ".venv" ]; then
+    warn "Removing old virtual environment..."
+    rm -rf .venv
 fi
 
-echo ""
-echo "Step 2: Installing dependencies..."
-echo "==================================="
+# Install dependencies as ytd user
+sudo -u "$APP_USER" -E bash << 'EOFPIPENV'
+export PIPENV_VENV_IN_PROJECT=1
+cd /opt/ytdl
 
-# Install backend dependencies
-echo "Installing backend dependencies..."
-cd backend
-npm install
-echo -e "${GREEN}✅ Backend dependencies installed${NC}"
+# Install dependencies
+pipenv install --deploy
+EOFPIPENV
 
-# Install frontend dependencies
-echo "Installing frontend dependencies..."
-cd ../frontend
-npm install
-echo -e "${GREEN}✅ Frontend dependencies installed${NC}"
+# Get venv path
+VENV_PATH=$(cd "$APP_DIR" && pipenv --venv)
+log "Python dependencies installed at $VENV_PATH"
 
-cd ..
-
-echo ""
-echo "Step 3: Setting up environment files..."
-echo "========================================"
-
-# Backend .env
-if [ ! -f backend/.env ]; then
-    cp backend/.env.example backend/.env
-    echo -e "${YELLOW}⚠️  Created backend/.env from example${NC}"
-    echo -e "${YELLOW}   Please edit backend/.env with your configuration${NC}"
+# Verify installations
+info "Verifying installations..."
+if "$VENV_PATH/bin/python" -c "import yt_dlp; print('yt-dlp version:', yt_dlp.version.__version__)" 2>/dev/null; then
+    log "yt-dlp verified"
 else
-    echo -e "${GREEN}✅ backend/.env already exists${NC}"
+    warn "yt-dlp not found in virtualenv - check Pipfile"
 fi
 
-# Frontend .env.local
-if [ ! -f frontend/.env.local ]; then
-    cp frontend/.env.example frontend/.env.local
-    echo -e "${YELLOW}⚠️  Created frontend/.env.local from example${NC}"
-    echo -e "${YELLOW}   Please edit frontend/.env.local with your configuration${NC}"
-else
-    echo -e "${GREEN}✅ frontend/.env.local already exists${NC}"
+# Set venv permissions
+chmod -R 755 .venv
+chown -R "$APP_USER":"$APP_USER" .venv
+
+log "Python dependencies installed"
+
+# ------------------------------------------------------------
+# 8. Create Environment File
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 6: Creating Environment Configuration"
+echo "============================================================"
+echo ""
+
+ENV_FILE="$APP_DIR/.env.production"
+
+info "Creating .env.production file..."
+
+cat > "$ENV_FILE" << EOFENV
+# Database
+MONGODB_URI=$MONGODB_URI
+
+# Redis
+REDIS_URL=$REDIS_URL
+
+# Celery (uses Redis)
+CELERY_BROKER_URL=${REDIS_URL}/0
+CELERY_RESULT_BACKEND=${REDIS_URL}/0
+
+# Google Cloud Storage
+GCP_PROJECT_ID=$GCP_PROJECT_ID
+GCP_BUCKET_NAME=$GCP_BUCKET_NAME
+GOOGLE_APPLICATION_CREDENTIALS=/opt/ytdl/gcp-credentials.json
+
+# FastAPI Server
+PORT=3001
+ENVIRONMENT=production
+CORS_ORIGINS=$CORS_ORIGINS
+
+# Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=30
+
+# File Cleanup
+FILE_EXPIRY_HOURS=12
+
+# System Paths
+FFMPEG_PATH=/usr/bin/ffmpeg
+FFPROBE_PATH=/usr/bin/ffprobe
+YT_DLP_PATH=/opt/ytdl/.venv/bin/yt-dlp
+EOFENV
+
+# Add proxy if configured
+if [ -n "$PROXY_URL" ]; then
+    echo "YT_DLP_PROXY=$PROXY_URL" >> "$ENV_FILE"
 fi
 
-echo ""
-echo "Step 4: Checking optional services..."
-echo "======================================"
+chmod 640 "$ENV_FILE"
+chown "$APP_USER":"$APP_USER" "$ENV_FILE"
 
-# Check MongoDB
-if command -v mongod &> /dev/null; then
-    echo -e "${GREEN}✅ MongoDB installed locally${NC}"
-else
-    echo -e "${YELLOW}⚠️  MongoDB not found locally${NC}"
-    echo "   You can use MongoDB Atlas (recommended for production)"
-    echo "   Or install locally: https://www.mongodb.com/try/download/community"
+log "Environment configuration created"
+
+warn "IMPORTANT: You need to upload your GCP credentials file to /opt/ytdl/gcp-credentials.json"
+warn "Example: scp your-gcp-credentials.json root@server:/opt/ytdl/gcp-credentials.json"
+
+# ------------------------------------------------------------
+# 9. Create Required Directories
+# ------------------------------------------------------------
+info "Creating required directories..."
+mkdir -p "$APP_DIR/downloads" "$APP_DIR/logs"
+chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+log "Directories created"
+
+# ------------------------------------------------------------
+# 10. Create Systemd Services
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 7: Creating Systemd Services"
+echo "============================================================"
+echo ""
+
+SERVICE_PREFIX="ytd"
+
+info "Creating API service..."
+cat > "/etc/systemd/system/${SERVICE_PREFIX}-api.service" << 'EOFAPI'
+[Unit]
+Description=YTD FastAPI Server
+After=network.target
+
+[Service]
+Type=simple
+User=ytd
+Group=ytd
+WorkingDirectory=/opt/ytdl
+Environment="PATH=/opt/ytdl/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/ytdl/.env.production
+ExecStart=/opt/ytdl/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 3001
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOFAPI
+
+info "Creating Celery worker service..."
+cat > "/etc/systemd/system/${SERVICE_PREFIX}-worker.service" << 'EOFWORKER'
+[Unit]
+Description=YTD Celery Worker
+After=network.target
+
+[Service]
+Type=simple
+User=ytd
+Group=ytd
+WorkingDirectory=/opt/ytdl
+Environment="PATH=/opt/ytdl/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/ytdl/.env.production
+ExecStart=/opt/ytdl/.venv/bin/celery -A app.queue.celery_app worker --loglevel=info --concurrency=1 --max-tasks-per-child=10
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOFWORKER
+
+info "Creating Celery beat service..."
+cat > "/etc/systemd/system/${SERVICE_PREFIX}-beat.service" << 'EOFBEAT'
+[Unit]
+Description=YTD Celery Beat Scheduler
+After=network.target
+
+[Service]
+Type=simple
+User=ytd
+Group=ytd
+WorkingDirectory=/opt/ytdl
+Environment="PATH=/opt/ytdl/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+EnvironmentFile=/opt/ytdl/.env.production
+ExecStart=/opt/ytdl/.venv/bin/celery -A app.queue.celery_app beat --loglevel=info
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOFBEAT
+
+log "Systemd services created"
+
+# ------------------------------------------------------------
+# 11. Configure Nginx
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 8: Configuring Nginx"
+echo "============================================================"
+echo ""
+
+info "Creating Nginx configuration..."
+
+cat > /etc/nginx/sites-available/ytd << EOFNGINX
+server {
+    listen 80;
+    server_name $DOMAIN_NAME;
+
+    client_max_body_size 100M;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_cache_bypass \$http_upgrade;
+
+        # Timeout settings for long-running downloads
+        proxy_connect_timeout 300;
+        proxy_send_timeout 300;
+        proxy_read_timeout 300;
+        send_timeout 300;
+    }
+}
+EOFNGINX
+
+# Enable site
+if [ -L /etc/nginx/sites-enabled/ytd ]; then
+    rm /etc/nginx/sites-enabled/ytd
+fi
+ln -s /etc/nginx/sites-available/ytd /etc/nginx/sites-enabled/
+
+# Remove default site
+if [ -L /etc/nginx/sites-enabled/default ]; then
+    rm /etc/nginx/sites-enabled/default
 fi
 
-# Check Redis
-if command -v redis-server &> /dev/null; then
-    echo -e "${GREEN}✅ Redis installed locally${NC}"
-else
-    echo -e "${YELLOW}⚠️  Redis not found locally${NC}"
-    echo "   You can use Redis Cloud (recommended for production)"
-    echo "   Or install locally:"
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "   brew install redis"
-    else
-        echo "   sudo apt-get install redis-server"
-    fi
+# Test nginx configuration
+nginx -t
+
+log "Nginx configured"
+
+# ------------------------------------------------------------
+# 12. Setup SSL (if requested)
+# ------------------------------------------------------------
+if [ "$SETUP_SSL" == "y" ]; then
+    echo ""
+    echo "============================================================"
+    echo "  Step 9: Setting Up SSL with Let's Encrypt"
+    echo "============================================================"
+    echo ""
+
+    info "Obtaining SSL certificate..."
+    certbot --nginx -d "$DOMAIN_NAME" --non-interactive --agree-tos -m "$SSL_EMAIL" --redirect || warn "SSL setup failed - run 'sudo certbot --nginx -d ${DOMAIN_NAME}' manually"
+
+    log "SSL certificate obtained and configured"
 fi
 
-# Check Docker
-if command -v docker &> /dev/null; then
-    echo -e "${GREEN}✅ Docker installed${NC}"
+# ------------------------------------------------------------
+# 13. Start Services
+# ------------------------------------------------------------
+echo ""
+echo "============================================================"
+echo "  Step 10: Starting Services"
+echo "============================================================"
+echo ""
+
+info "Reloading systemd daemon..."
+systemctl daemon-reload
+
+info "Enabling services..."
+systemctl enable ytd-api ytd-worker ytd-beat nginx
+
+info "Starting services..."
+systemctl restart nginx
+systemctl restart ytd-api ytd-worker ytd-beat
+
+sleep 3
+
+# Check service status
+echo ""
+info "Checking service status..."
+if systemctl is-active --quiet ytd-api; then
+    log "API server is running"
 else
-    echo -e "${YELLOW}⚠️  Docker not found${NC}"
-    echo "   Docker is optional but recommended for deployment"
-    echo "   Install from: https://www.docker.com/get-started"
+    warn "API server failed to start"
 fi
 
+if systemctl is-active --quiet ytd-worker; then
+    log "Celery worker is running"
+else
+    warn "Celery worker failed to start"
+fi
+
+if systemctl is-active --quiet ytd-beat; then
+    log "Celery beat is running"
+else
+    warn "Celery beat failed to start"
+fi
+
+if systemctl is-active --quiet nginx; then
+    log "Nginx is running"
+else
+    warn "Nginx failed to start"
+fi
+
+# ------------------------------------------------------------
+# 14. Verify GCS Configuration (from check-gcs.sh)
+# ------------------------------------------------------------
 echo ""
-echo "=================================================="
-echo -e "${GREEN}✅ Installation Complete!${NC}"
-echo "=================================================="
+echo "============================================================"
+echo "  Step 11: Verifying Configuration"
+echo "============================================================"
 echo ""
-echo "Next steps:"
-echo "1. Configure backend/.env with your MongoDB, Redis, and GCS credentials"
-echo "2. Configure frontend/.env.local with your API URL"
-echo "3. Start the services:"
+
+info "GCS configuration will be verified once you upload credentials..."
+warn "Remember to upload: scp your-credentials.json root@server:/opt/ytdl/gcp-credentials.json"
+warn "Then set permissions: sudo chown ytd:ytd /opt/ytdl/gcp-credentials.json && sudo chmod 640 /opt/ytdl/gcp-credentials.json"
+warn "And restart services: sudo systemctl restart ytd-worker ytd-api ytd-beat"
+
+# ------------------------------------------------------------
+# Installation Complete
+# ------------------------------------------------------------
 echo ""
-echo "   Terminal 1 - Backend:"
-echo "   cd backend && npm run dev"
+echo "============================================================"
+echo -e "${GREEN}  Installation Complete!${NC}"
+echo "============================================================"
 echo ""
-echo "   Terminal 2 - Frontend:"
-echo "   cd frontend && npm run dev"
+echo "Application Details:"
+echo "  - App Directory: $APP_DIR"
+echo "  - Domain: $DOMAIN_NAME"
+echo "  - API Port: 3001"
+if [ "$SETUP_SSL" == "y" ]; then
+    echo "  - SSL: Enabled (auto-renewal configured)"
+    echo "  - URL: https://$DOMAIN_NAME"
+else
+    echo "  - SSL: Not configured"
+    echo "  - URL: http://$DOMAIN_NAME"
+fi
 echo ""
-echo "4. Open http://localhost:3000 in your browser"
+echo "IMPORTANT NEXT STEPS:"
+echo "  1. Upload GCP credentials:"
+echo "     scp your-credentials.json root@server:/opt/ytdl/gcp-credentials.json"
+echo "     sudo chown ytd:ytd /opt/ytdl/gcp-credentials.json"
+echo "     sudo chmod 640 /opt/ytdl/gcp-credentials.json"
 echo ""
-echo "For detailed instructions, see:"
-echo "- QUICKSTART.md for quick setup"
-echo "- README.md for full documentation"
-echo "- DEPLOYMENT.md for production deployment"
+echo "  2. After uploading credentials, restart services:"
+echo "     sudo systemctl restart ytd-worker ytd-api ytd-beat"
 echo ""
-echo "Happy coding! 🎉"
+echo "  3. Verify GCS connection (optional):"
+echo "     cd /opt/ytdl && sudo bash -c 'source .env.production && $VENV_PATH/bin/python -c \"from google.cloud import storage; client = storage.Client(); print(\\\"GCS Connected!\\\")\"'"
+echo ""
+echo "Useful Commands:"
+echo "  - View API logs:    sudo journalctl -u ytd-api -f"
+echo "  - View worker logs: sudo journalctl -u ytd-worker -f"
+echo "  - View beat logs:   sudo journalctl -u ytd-beat -f"
+echo "  - Restart services: sudo systemctl restart ytd-worker ytd-api ytd-beat"
+echo "  - Check status:     sudo systemctl status ytd-worker ytd-api ytd-beat"
+echo "  - Update code:      cd /opt/ytdl && git pull && sudo systemctl restart ytd-worker ytd-api ytd-beat"
+echo ""
+if [ -z "$PROXY_URL" ]; then
+    warn "NO PROXY CONFIGURED: YouTube Shorts may be blocked on cloud server IPs"
+    echo "  To add a proxy later, edit /opt/ytdl/.env.production and add:"
+    echo "  YT_DLP_PROXY=socks5://user:pass@host:port"
+    echo "  Then restart: sudo systemctl restart ytd-worker ytd-api"
+    echo ""
+fi
+echo "============================================================"
+echo ""

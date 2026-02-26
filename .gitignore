@@ -1,29 +1,50 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.js
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv/
+venv/
+ENV/
+env/
 
 # Testing
-coverage/
-
-# Production
-build/
-dist/
-.next/
-out/
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
 
 # Environment variables
 .env
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.production
+.env.server1
+.env.server2
+.env.server3
+.env.production.server1
+.env.production.server2
+.env.production.server3
 
 # Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 *.log
+logs/
 
 # OS files
 .DS_Store
@@ -47,17 +68,18 @@ credentials.json
 service-account-key.json
 *-credentials.json
 divine-actor-*.json
-*.json
-!package.json
-!package-lock.json
-!tsconfig.json
 
 # YouTube cookies (NEVER commit these!)
 *cookies.txt
 youtube*.txt
 
-# Redis dump
+# Redis/Celery
 dump.rdb
+celerybeat-schedule
+celerybeat.pid
 
-# Misc
-.vercel
+# MongoDB dumps
+mongodb_dump/
+
+# Node.js
+node_modules/
