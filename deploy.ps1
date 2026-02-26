@@ -109,6 +109,9 @@ foreach ($server in $servers) {
         $deployCommands = @"
 set -e
 
+# Set non-interactive mode for apt-get
+export DEBIAN_FRONTEND=noninteractive
+
 echo '  [1/9] Checking Python version...'
 PYTHON_VERSION=`$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')`
 REQUIRED_VERSION='3.13'
@@ -145,30 +148,34 @@ else
     fi
 fi
 
-echo '  [2/9] Navigating to deployment directory...'
+echo '  [2/9] Fixing ownership and permissions...'
+chown -R ytd:ytd $deployPath
+chmod -R u+rwX,go+rX $deployPath
+
+echo '  [3/9] Navigating to deployment directory...'
 cd $deployPath
 
-echo '  [3/9] Pulling latest code from GitHub...'
+echo '  [4/9] Configuring git safe directory...'
+git config --global --add safe.directory $deployPath
+
+echo '  [5/9] Pulling latest code from GitHub...'
 git fetch origin
 git reset --hard origin/$branch
 
-echo '  [4/9] Fixing ownership...'
-chown -R ytd:ytd $deployPath
-
-echo '  [5/9] Recreating virtual environment with Python 3.13...'
+echo '  [6/9] Recreating virtual environment with Python 3.13...'
 rm -rf $deployPath/.venv
 sudo -u ytd python3.13 -m venv $deployPath/.venv
 
-echo '  [6/9] Upgrading pip...'
+echo '  [7/9] Upgrading pip...'
 sudo -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
 
-echo '  [7/9] Installing/updating dependencies...'
+echo '  [8/9] Installing/updating dependencies...'
 sudo -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
 
-echo '  [8/9] Restarting services...'
+echo '  [9/9] Restarting services...'
 systemctl restart ytd-api ytd-worker
 
-echo '  [9/9] Checking service status...'
+echo '  [10/10] Checking service status...'
 sleep 3
 if systemctl is-active --quiet ytd-api && systemctl is-active --quiet ytd-worker; then
     echo '  Services running successfully'
