@@ -1,0 +1,25 @@
+{
+  "servers": [
+    {
+      "id": 1,
+      "host": "user@hostname-or-ip",
+      "name": "Server 1 Description",
+      "account": "Account A (email@example.com)",
+      "sshKey": null
+    },
+    {
+      "id": 2,
+      "host": "user@hostname-or-ip",
+      "name": "Server 2 Description",
+      "account": "Account B (email@example.com)",
+      "sshKey": "%USERPROFILE%\\.ssh\\key_file"
+    },
+    {
+      "id": 3,
+      "host": "user@hostname-or-ip",
+      "name": "Server 3 Description",
+      "account": "Account C (email@example.com)",
+      "sshKey": "%USERPROFILE%\\.ssh\\key_file.pem"
+    }
+  ]
+}
