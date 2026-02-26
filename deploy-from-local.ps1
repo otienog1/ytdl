@@ -56,31 +56,29 @@ foreach ($server in $config.servers) {
 
 function Write-Header {
     param([string]$Text)
-    Write-Host ""
-    Write-Host "========================================================================" -ForegroundColor Cyan
-    Write-Host $Text -ForegroundColor Cyan
-    Write-Host "========================================================================" -ForegroundColor Cyan
+    Write-Host "`n========================================================================" -ForegroundColor Cyan
+    Write-Host " $Text" -ForegroundColor Cyan
+    Write-Host "========================================================================`n" -ForegroundColor Cyan
 }
 
 function Write-Step {
     param([string]$Text)
-    Write-Host ""
-    Write-Host $Text -ForegroundColor Yellow
+    Write-Host "`n$Text" -ForegroundColor Yellow
 }
 
 function Write-Success {
     param([string]$Text)
-    Write-Host "✅ $Text" -ForegroundColor Green
+    Write-Host "[OK] $Text" -ForegroundColor Green
 }
 
 function Write-Error-Message {
     param([string]$Text)
-    Write-Host "❌ $Text" -ForegroundColor Red
+    Write-Host "[ERROR] $Text" -ForegroundColor Red
 }
 
 function Write-Warning-Message {
     param([string]$Text)
-    Write-Host "⚠️  $Text" -ForegroundColor Yellow
+    Write-Host "[WARNING] $Text" -ForegroundColor Yellow
 }
 
 function Invoke-SSHCommand {
@@ -232,23 +230,23 @@ function Deploy-ToServer {
 
         $apiStatus = Invoke-SSHCommand -SSHHost $sshHost -SSHKey $sshKey -UseSudo $useSudo -Command "systemctl is-active ytd-api" 2>&1
         if ($apiStatus -match "active") {
-            Write-Host "  ✅ ytd-api" -ForegroundColor Green
+            Write-Host "  [OK] ytd-api" -ForegroundColor Green
         } else {
-            Write-Host "  ❌ ytd-api" -ForegroundColor Red
+            Write-Host "  [FAIL] ytd-api" -ForegroundColor Red
         }
 
         $workerStatus = Invoke-SSHCommand -SSHHost $sshHost -SSHKey $sshKey -UseSudo $useSudo -Command "systemctl is-active ytd-worker" 2>&1
         if ($workerStatus -match "active") {
-            Write-Host "  ✅ ytd-worker" -ForegroundColor Green
+            Write-Host "  [OK] ytd-worker" -ForegroundColor Green
         } else {
-            Write-Host "  ❌ ytd-worker" -ForegroundColor Red
+            Write-Host "  [FAIL] ytd-worker" -ForegroundColor Red
         }
 
         $beatStatus = Invoke-SSHCommand -SSHHost $sshHost -SSHKey $sshKey -UseSudo $useSudo -Command "systemctl is-active ytd-beat" 2>&1
         if ($beatStatus -match "active") {
-            Write-Host "  ✅ ytd-beat" -ForegroundColor Green
+            Write-Host "  [OK] ytd-beat" -ForegroundColor Green
         } else {
-            Write-Host "  ❌ ytd-beat" -ForegroundColor Red
+            Write-Host "  [FAIL] ytd-beat" -ForegroundColor Red
         }
 
         Write-Host ""
@@ -323,17 +321,17 @@ Write-Header "DEPLOYMENT SUMMARY"
 Write-Host ""
 
 if ($successfulDeployments.Count -gt 0) {
-    Write-Host "✅ Successful Deployments ($($successfulDeployments.Count)):" -ForegroundColor Green
+    Write-Host "[OK] Successful Deployments ($($successfulDeployments.Count)):" -ForegroundColor Green
     foreach ($serverNum in $successfulDeployments) {
-        Write-Host "   Server $serverNum : $($SERVERS[$serverNum].Name)" -ForegroundColor Green
+        Write-Host "  - Server $serverNum : $($SERVERS[$serverNum].Name)" -ForegroundColor Green
     }
 }
 
 if ($failedDeployments.Count -gt 0) {
     Write-Host ""
-    Write-Host "❌ Failed Deployments ($($failedDeployments.Count)):" -ForegroundColor Red
+    Write-Host "[FAIL] Failed Deployments ($($failedDeployments.Count)):" -ForegroundColor Red
     foreach ($serverNum in $failedDeployments) {
-        Write-Host "   Server $serverNum : $($SERVERS[$serverNum].Name)" -ForegroundColor Red
+        Write-Host "  - Server $serverNum : $($SERVERS[$serverNum].Name)" -ForegroundColor Red
     }
 }
 
