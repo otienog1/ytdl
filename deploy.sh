@@ -18,13 +18,6 @@ if [ ! -f "$CONFIG_FILE" ]; then
     exit 1
 fi
 
-# Check if jq is installed
-if ! command -v jq &> /dev/null; then
-    echo "[ERROR] jq is required but not installed."
-    echo "Install it with: sudo apt-get install jq (Debian/Ubuntu) or brew install jq (macOS)"
-    exit 1
-fi
-
 DEPLOY_PATH="/opt/ytdl"
 BRANCH="main"
 
@@ -68,21 +61,21 @@ ssh_exec() {
 
 print_header "YouTube Downloader - Deployment Script"
 
-# Read number of servers
-server_count=$(jq '.servers | length' "$CONFIG_FILE")
+# Parse JSON using Python (more portable than jq)
+servers_json=$(python3 -c "
+import json, sys, os
+with open('$CONFIG_FILE') as f:
+    config = json.load(f)
+    for server in config['servers']:
+        ssh_key = server.get('sshKey', '')
+        if ssh_key:
+            ssh_key = os.path.expandvars(ssh_key)
+        print(f\"{server['host']}|{server['name']}|{ssh_key}\")
+")
 
 failed_servers=()
 
-for ((i=0; i<server_count; i++)); do
-    # Extract server details
-    host=$(jq -r ".servers[$i].host" "$CONFIG_FILE")
-    name=$(jq -r ".servers[$i].name" "$CONFIG_FILE")
-    ssh_key=$(jq -r ".servers[$i].sshKey // empty" "$CONFIG_FILE")
-
-    # Expand environment variables in SSH key path
-    if [ -n "$ssh_key" ]; then
-        ssh_key=$(eval echo "$ssh_key")
-    fi
+while IFS='|' read -r host name ssh_key; do
 
     print_server_header "$name"
 
@@ -184,7 +177,7 @@ fi
     fi
 
     echo ""
-done
+done <<< "$servers_json"
 
 # ===================================================================
 # SUMMARY
