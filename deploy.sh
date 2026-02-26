@@ -64,7 +64,15 @@ print_header "YouTube Downloader - Deployment Script"
 # Parse JSON using Python (more portable than jq)
 servers_json=$(python3 -c "
 import json, sys, os
-with open('$CONFIG_FILE') as f:
+from pathlib import Path
+
+# Handle both Windows and Unix paths
+config_path = Path('$CONFIG_FILE')
+if not config_path.exists():
+    # Try with forward slashes for Git Bash on Windows
+    config_path = Path('$CONFIG_FILE'.replace('/c/', 'C:/'))
+
+with open(config_path) as f:
     config = json.load(f)
     for server in config['servers']:
         ssh_key = server.get('sshKey', '')
