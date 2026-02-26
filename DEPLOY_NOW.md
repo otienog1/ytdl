@@ -1,141 +1,176 @@
-# Deploy Redis Connection Fix - READY TO RUN
+# Deploy Hybrid Redis - Start Here
 
-## Current Issue
+## ✅ Server Git Issue Fixed
 
-Your server is experiencing:
+The server had a "divergent branches" error which has been fixed. The server is now synced with GitHub (commit 74b972c).
+
+---
+
+## 🚀 Deploy to All Servers
+
+You have **two options** to deploy:
+
+### Option 1: PowerShell (Recommended for Windows)
+
+**Just double-click:**
 ```
-redis.exceptions.ConnectionError: max number of clients reached
+deploy-from-local.bat
 ```
 
-## The Fix is Ready
+This will run the PowerShell deployment script which:
+- Deploys to all 3 servers automatically
+- Uses the config from `deploy-config.json`
+- Shows colored status updates
+- Verifies each deployment
 
-All code has been committed and is ready to deploy. The fix includes:
+### Option 2: Bash Script
 
-1. ✅ **Redis connection pooling** - Limits connections to 10 per client
-2. ✅ **Celery broker pool limits** - Max 5 connections for broker & backend
-3. ✅ **Reduced worker concurrency** - From 2 to 1 concurrent task
-4. ✅ **Systemd path fixes** - Updates all services to use `/opt/ytdl`
-
-## Deploy in 1 Command
-
-SSH into your server and run:
-
+If you prefer bash (Git Bash/WSL):
 ```bash
-cd /opt/ytdl && sudo git pull && sudo bash DEPLOY_FIXES.sh
+bash deploy-from-local.sh
 ```
 
-That's it! The script will:
-1. Pull latest code with Redis fixes
-2. Update submodules (backend-python)
-3. Fix systemd service paths
-4. Apply Redis connection limits
-5. Restart all services
-6. Show service status
+---
 
-## Expected Results
+## 📋 What Gets Deployed
 
-**Before:**
-- Redis connections: ~30 (at limit) ❌
-- API server: ~10 connections
-- Celery worker: ~12 connections (2 concurrent)
-- Celery beat: ~8 connections
+On each server, the deployment will:
 
-**After:**
-- Redis connections: ~15 (50% usage) ✅
-- API server: ~5 connections (pooled)
-- Celery worker: ~6 connections (1 concurrent, pooled)
-- Celery beat: ~4 connections (pooled)
+1. ✅ Pull latest code from GitHub
+2. ✅ Install local Redis (if not installed)
+3. ✅ Copy `.env.production.server[N]` → `.env.production`
+4. ✅ Restart all services (ytd-api, ytd-worker, ytd-beat)
+5. ✅ Run verification tests
 
-## Verify Fix
+---
 
-After deployment, check Redis connection count:
+## ⚠️ Before You Deploy
 
+Make sure you've created the production config files:
+
+### Required Files (on your local machine):
+
+```
+backend-python/.env.production.server1
+backend-python/.env.production.server2
+backend-python/.env.production.server3
+
+cookie-extractor/.env.production.server1
+cookie-extractor/.env.production.server2
+cookie-extractor/.env.production.server3
+```
+
+**Don't have these files?**
+
+👉 See [PRODUCTION_CONFIG_SETUP.md](PRODUCTION_CONFIG_SETUP.md) for setup instructions
+
+---
+
+## 🎯 Expected Result
+
+After deployment completes successfully, you should see:
+
+```
+✅ Successful Deployments (3):
+   Server 1 : ytd.timobosafaris.com
+   Server 2 : GCP 34.57.68.120
+   Server 3 : AWS 13.60.71.187
+
+🎉 All servers deployed successfully!
+```
+
+Each server will have:
+- ✅ Local Redis running (zero latency)
+- ✅ Backend services active
+- ✅ Correct account configuration
+- ✅ No timeout errors
+
+---
+
+## 🔍 WebSocket Issue
+
+You also mentioned WebSocket connection errors (error 1006). After deployment, test the WebSocket fix:
+
+### Run Diagnostic on Server 1:
 ```bash
-redis-cli -h redis-17684.c10.us-east-1-3.ec2.cloud.redislabs.com \
-  -p 17684 \
-  -a tAS7YHDkYRe3sOXjHagnZzFfw0bsY7YM \
-  INFO clients | grep connected_clients
+ssh root@ytd.timobosafaris.com
+cd /opt/ytdl
+bash diagnose-websocket.sh
 ```
 
-Should show: `connected_clients:15` (or less)
+This will check:
+- Nginx configuration
+- Backend services status
+- WebSocket endpoint connectivity
+- Upstream server reachability
 
-## Monitor Logs
+👉 See [FIX_WEBSOCKET.md](FIX_WEBSOCKET.md) for complete troubleshooting guide
 
-Watch for any Redis errors:
+---
 
+## 🚨 If Deployment Fails
+
+### Issue: Can't SSH to server
+- Check your `deploy-config.json` has correct server IPs
+- Make sure SSH keys are in the right location
+- Test manually: `ssh root@ytd.timobosafaris.com`
+
+### Issue: Missing .env.production.server* files
+- The deployment script will fail if these don't exist
+- Create them following [PRODUCTION_CONFIG_SETUP.md](PRODUCTION_CONFIG_SETUP.md)
+
+### Issue: Services won't start
+- SSH to the server: `ssh root@<server-ip>`
+- Check logs: `sudo journalctl -u ytd-api -n 50`
+- Check Redis: `redis-cli ping`
+
+---
+
+## 📞 Quick Commands
+
+### Deploy to all servers:
 ```bash
-sudo journalctl -u ytd-worker -f | grep -i redis
+deploy-from-local.bat
 ```
 
-If no "max clients" errors appear within 5 minutes, the fix is successful!
+### Check server status:
+```bash
+ssh root@ytd.timobosafaris.com "systemctl status ytd-api ytd-worker ytd-beat"
+```
 
-## What Changed
+### Monitor worker logs:
+```bash
+ssh root@ytd.timobosafaris.com "journalctl -u ytd-worker -f"
+```
 
-### Files Modified:
+### Test backend health:
+```bash
+curl https://ytd.timobosafaris.com/api/health/
+```
 
-1. **[app/config/redis_client.py](backend-python/app/config/redis_client.py)**
-   ```python
-   max_connections=10,
-   socket_keepalive=True,
-   socket_connect_timeout=5
-   ```
+---
 
-2. **[app/queue/celery_app.py](backend-python/app/queue/celery_app.py)**
-   ```python
-   broker_pool_limit=5,
-   broker_transport_options={'max_connections': 5},
-   result_backend_transport_options={'max_connections': 5}
-   ```
+## 🎉 Next Steps After Deployment
 
-3. **[/etc/systemd/system/ytd-worker.service](backend-python/fix-redis-connections.sh)**
+1. **Verify no timeout errors:**
    ```bash
-   # Changed from: --concurrency=2
-   # To: --concurrency=1
+   ssh root@ytd.timobosafaris.com "journalctl -u ytd-worker --since '10 minutes ago' | grep -i timeout"
+   ```
+   Should return nothing!
+
+2. **Test a download** from the frontend at https://ytd.timobosafaris.com
+
+3. **Check WebSocket connection** in browser console - should see:
+   ```
+   ✅ WebSocket connected
+   ✅ Receiving progress updates
    ```
 
-4. **[All systemd services](backend-python/fix-systemd-paths.sh)**
-   ```bash
-   # Changed all paths from: /home/admin/ytdl
-   # To: /opt/ytdl
-   ```
-
-## Troubleshooting
-
-### If services fail to start:
-
-```bash
-# Check specific service logs
-sudo journalctl -u ytd-worker -n 100
-sudo journalctl -u ytd-api -n 100
-sudo journalctl -u ytd-beat -n 100
-```
-
-### If still getting "max clients" error:
-
-```bash
-# Restart all services to kill zombie connections
-sudo systemctl restart ytd-api ytd-worker ytd-beat
-
-# Wait 10 seconds
-sleep 10
-
-# Check connection count again
-redis-cli -h redis-17684.c10.us-east-1-3.ec2.cloud.redislabs.com \
-  -p 17684 \
-  -a tAS7YHDkYRe3sOXjHagnZzFfw0bsY7YM \
-  INFO clients | grep connected_clients
-```
-
-## Success Criteria
-
-✅ No "max clients reached" errors in logs
-✅ Redis connection count under 20
-✅ All three services running without restarts
-✅ Downloads complete successfully
+4. **Monitor performance** - local Redis should give <5ms response times
 
 ---
 
 **Ready to deploy?** Just run:
-```bash
-cd /opt/ytdl && sudo git pull && sudo bash DEPLOY_FIXES.sh
+```
+deploy-from-local.bat
 ```
