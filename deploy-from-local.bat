@@ -23,10 +23,5 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-echo Running deployment via Bash...
-echo.
-
-REM Run the bash script
-bash deploy-from-local.sh
-
-pause
+REM Run PowerShell deployment script
+powershell -ExecutionPolicy Bypass -File "%~dp0deploy-from-local.ps1"
