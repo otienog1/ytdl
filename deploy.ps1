@@ -10,17 +10,17 @@ $ErrorActionPreference = "Stop"
 # Server configurations
 $servers = @(
     @{
-        Host = "ytd.timobosafaris.com"
+        ServerHost = "ytd.timobosafaris.com"
         Name = "Linode"
         User = "root"
     },
     @{
-        Host = "35.193.12.77"
+        ServerHost = "35.193.12.77"
         Name = "GCP"
         User = "root"
     },
     @{
-        Host = "13.60.71.187"
+        ServerHost = "13.60.71.187"
         Name = "AWS"
         User = "root"
     }
@@ -55,9 +55,9 @@ function Write-Error-Message {
 }
 
 function Write-ServerHeader {
-    param([string]$Name, [string]$Host)
+    param([string]$Name, [string]$ServerHost)
     Write-Host ""
-    Write-Host ">>> Deploying to $Name ($Host)..." -ForegroundColor Yellow
+    Write-Host ">>> Deploying to $Name ($ServerHost)..." -ForegroundColor Yellow
 }
 
 # Function to execute SSH command
@@ -89,9 +89,9 @@ Write-Header "YouTube Downloader - Deployment Script"
 $failedServers = @()
 
 foreach ($server in $servers) {
-    Write-ServerHeader -Name $server.Name -Host $server.Host
+    Write-ServerHeader -Name $server.Name -ServerHost $server.ServerHost
 
-    $sshHost = "$($server.User)@$($server.Host)"
+    $sshHost = "$($server.User)@$($server.ServerHost)"
 
     try {
         # Build the deployment commands
