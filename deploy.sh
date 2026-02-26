@@ -93,6 +93,13 @@ set -e
 # Set non-interactive mode for apt-get
 export DEBIAN_FRONTEND=noninteractive
 
+# Detect if running as root
+if [ \"\$(id -u)\" = \"0\" ]; then
+    SUDO=\"\"
+else
+    SUDO=\"sudo\"
+fi
+
 echo '  [1/10] Checking Python version...'
 PYTHON_VERSION=\$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
 REQUIRED_VERSION='3.13'
@@ -133,25 +140,25 @@ echo '  [2/10] Navigating to deployment directory...'
 cd $DEPLOY_PATH
 
 echo '  [3/10] Configuring git safe directory...'
-sudo -u ytd git config --global --add safe.directory $DEPLOY_PATH
+\$SUDO -u ytd git config --global --add safe.directory $DEPLOY_PATH
 
 echo '  [4/10] Pulling latest code from GitHub...'
-sudo -u ytd git fetch origin
-sudo -u ytd git reset --hard origin/$BRANCH
+\$SUDO -u ytd git fetch origin
+\$SUDO -u ytd git reset --hard origin/$BRANCH
 
 echo '  [5/10] Fixing ownership and permissions...'
-sudo chown -R ytd:ytd $DEPLOY_PATH
-sudo chmod -R u+rwX,go+rX $DEPLOY_PATH
+\$SUDO chown -R ytd:ytd $DEPLOY_PATH
+\$SUDO chmod -R u+rwX,go+rX $DEPLOY_PATH
 
 echo '  [6/10] Recreating virtual environment with Python 3.13...'
 rm -rf $DEPLOY_PATH/.venv
-sudo -u ytd python3.13 -m venv $DEPLOY_PATH/.venv
+\$SUDO -u ytd python3.13 -m venv $DEPLOY_PATH/.venv
 
 echo '  [7/10] Upgrading pip...'
-sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install --upgrade pip --quiet
+\$SUDO -u ytd $DEPLOY_PATH/.venv/bin/pip install --upgrade pip --quiet
 
 echo '  [8/10] Installing/updating dependencies...'
-sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install -r requirements.txt --quiet
+\$SUDO -u ytd $DEPLOY_PATH/.venv/bin/pip install -r requirements.txt --quiet
 
 echo '  [9/10] Restarting services...'
 systemctl restart ytd-api ytd-worker ytd-beat

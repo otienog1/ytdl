@@ -112,7 +112,14 @@ set -e
 # Set non-interactive mode for apt-get
 export DEBIAN_FRONTEND=noninteractive
 
-echo '  [1/9] Checking Python version...'
+# Detect if running as root
+if [ "`$(id -u)" = "0" ]; then
+    SUDO=""
+else
+    SUDO="sudo"
+fi
+
+echo '  [1/10] Checking Python version...'
 PYTHON_VERSION=`$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')`
 REQUIRED_VERSION='3.13'
 
@@ -148,29 +155,29 @@ else
     fi
 fi
 
-echo '  [2/11] Navigating to deployment directory...'
+echo '  [2/10] Navigating to deployment directory...'
 cd $deployPath
 
-echo '  [3/11] Configuring git safe directory...'
-sudo -u ytd git config --global --add safe.directory $deployPath
+echo '  [3/10] Configuring git safe directory...'
+`$SUDO -u ytd git config --global --add safe.directory $deployPath
 
-echo '  [4/11] Pulling latest code from GitHub...'
-sudo -u ytd git fetch origin
-sudo -u ytd git reset --hard origin/$branch
+echo '  [4/10] Pulling latest code from GitHub...'
+`$SUDO -u ytd git fetch origin
+`$SUDO -u ytd git reset --hard origin/$branch
 
-echo '  [5/11] Fixing ownership and permissions...'
-sudo chown -R ytd:ytd $deployPath
-sudo chmod -R u+rwX,go+rX $deployPath
+echo '  [5/10] Fixing ownership and permissions...'
+`$SUDO chown -R ytd:ytd $deployPath
+`$SUDO chmod -R u+rwX,go+rX $deployPath
 
-echo '  [6/11] Recreating virtual environment with Python 3.13...'
+echo '  [6/10] Recreating virtual environment with Python 3.13...'
 rm -rf $deployPath/.venv
-sudo -u ytd python3.13 -m venv $deployPath/.venv
+`$SUDO -u ytd python3.13 -m venv $deployPath/.venv
 
-echo '  [7/11] Upgrading pip...'
-sudo -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
+echo '  [7/10] Upgrading pip...'
+`$SUDO -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
 
-echo '  [8/11] Installing/updating dependencies...'
-sudo -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
+echo '  [8/10] Installing/updating dependencies...'
+`$SUDO -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
 
 echo '  [9/10] Restarting services...'
 systemctl restart ytd-api ytd-worker ytd-beat
