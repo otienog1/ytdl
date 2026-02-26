@@ -159,25 +159,25 @@ echo '  [2/10] Navigating to deployment directory...'
 cd $deployPath
 
 echo '  [3/10] Configuring git safe directory...'
-`$SUDO -u ytd git config --global --add safe.directory $deployPath
+$$SUDO -u ytd git config --global --add safe.directory $deployPath
 
 echo '  [4/10] Pulling latest code from GitHub...'
-`$SUDO -u ytd git fetch origin
-`$SUDO -u ytd git reset --hard origin/$branch
+$$SUDO -u ytd git fetch origin
+$$SUDO -u ytd git reset --hard origin/$branch
 
 echo '  [5/10] Fixing ownership and permissions...'
-`$SUDO chown -R ytd:ytd $deployPath
-`$SUDO chmod -R u+rwX,go+rX $deployPath
+$$SUDO chown -R ytd:ytd $deployPath
+$$SUDO chmod -R u+rwX,go+rX $deployPath
 
 echo '  [6/10] Recreating virtual environment with Python 3.13...'
 rm -rf $deployPath/.venv
-`$SUDO -u ytd python3.13 -m venv $deployPath/.venv
+$$SUDO -u ytd python3.13 -m venv $deployPath/.venv
 
 echo '  [7/10] Upgrading pip...'
-`$SUDO -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
+$$SUDO -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
 
 echo '  [8/10] Installing/updating dependencies...'
-`$SUDO -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
+$$SUDO -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
 
 echo '  [9/10] Restarting services...'
 systemctl restart ytd-api ytd-worker ytd-beat
