@@ -151,31 +151,35 @@ fi
 echo '  [2/10] Navigating to deployment directory...'
 cd $deployPath
 
-echo '  [3/10] Configuring git safe directory...'
-git config --global --add safe.directory $deployPath
+echo '  [3/10] Fixing .git directory permissions...'
+chown -R ytd:ytd $deployPath/.git
+chmod -R u+rwX $deployPath/.git
 
-echo '  [4/10] Pulling latest code from GitHub...'
-git fetch origin
-git reset --hard origin/$branch
+echo '  [4/10] Configuring git safe directory...'
+sudo -u ytd git config --global --add safe.directory $deployPath
 
-echo '  [5/10] Fixing ownership and permissions...'
+echo '  [5/10] Pulling latest code from GitHub...'
+sudo -u ytd git fetch origin
+sudo -u ytd git reset --hard origin/$branch
+
+echo '  [6/10] Fixing ownership and permissions...'
 chown -R ytd:ytd $deployPath
 chmod -R u+rwX,go+rX $deployPath
 
-echo '  [6/10] Recreating virtual environment with Python 3.13...'
+echo '  [7/10] Recreating virtual environment with Python 3.13...'
 rm -rf $deployPath/.venv
 sudo -u ytd python3.13 -m venv $deployPath/.venv
 
-echo '  [7/10] Upgrading pip...'
+echo '  [8/10] Upgrading pip...'
 sudo -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
 
-echo '  [8/10] Installing/updating dependencies...'
+echo '  [9/10] Installing/updating dependencies...'
 sudo -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
 
-echo '  [9/10] Restarting services...'
+echo '  [10/10] Restarting services...'
 systemctl restart ytd-api ytd-worker ytd-beat
 
-echo '  [10/10] Checking service status...'
+echo '  [11/11] Checking service status...'
 sleep 3
 if systemctl is-active --quiet ytd-api && systemctl is-active --quiet ytd-worker && systemctl is-active --quiet ytd-beat; then
     echo '  Services running successfully'
