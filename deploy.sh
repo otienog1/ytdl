@@ -154,15 +154,15 @@ echo '  [8/10] Installing/updating dependencies...'
 sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install -r requirements.txt --quiet
 
 echo '  [9/10] Restarting services...'
-systemctl restart ytd-api ytd-worker
+systemctl restart ytd-api ytd-worker ytd-beat
 
 echo '  [10/10] Checking service status...'
 sleep 3
-if systemctl is-active --quiet ytd-api && systemctl is-active --quiet ytd-worker; then
+if systemctl is-active --quiet ytd-api && systemctl is-active --quiet ytd-worker && systemctl is-active --quiet ytd-beat; then
     echo '  Services running successfully'
 else
     echo '  ERROR: Services failed to start'
-    systemctl status ytd-api ytd-worker --no-pager
+    systemctl status ytd-api ytd-worker ytd-beat --no-pager
     exit 1
 fi
 "
