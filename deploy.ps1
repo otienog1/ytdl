@@ -106,25 +106,28 @@ foreach ($server in $servers) {
 
     try {
         # Build the deployment commands
-        $deployCommands = @"
+        $deployCommands = @'
 set -e
 
 # Set non-interactive mode for apt-get
 export DEBIAN_FRONTEND=noninteractive
 
 # Detect if running as root
-if [ "$$(id -u)" = "0" ]; then
+if [ "$(id -u)" = "0" ]; then
     SUDO=""
 else
     SUDO="sudo"
 fi
 
 echo '  [1/10] Checking Python version...'
-PYTHON_VERSION=$$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
+PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
 REQUIRED_VERSION='3.13'
 
-if [ "$$(printf '%s\n' "$$REQUIRED_VERSION" "$$PYTHON_VERSION" | sort -V | head -n1)" != "$$REQUIRED_VERSION" ]; then
-    echo '  Python version is $$PYTHON_VERSION, upgrading to 3.13...'
+if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$PYTHON_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
+    echo "  Python version is $PYTHON_VERSION, upgrading to 3.13..."
+'@ + @"
+
+
 
     # Update package list
     apt-get update -qq
@@ -145,7 +148,7 @@ if [ "$$(printf '%s\n' "$$REQUIRED_VERSION" "$$PYTHON_VERSION" | sort -V | head 
 
     echo '  Python upgraded to 3.13'
 else
-    echo '  Python version $$PYTHON_VERSION is compatible'
+    echo "  Python version $PYTHON_VERSION is compatible"
 
     # Ensure python-is-python3 is installed
     if ! dpkg -l | grep -q python-is-python3; then
@@ -159,25 +162,25 @@ echo '  [2/10] Navigating to deployment directory...'
 cd $deployPath
 
 echo '  [3/10] Configuring git safe directory...'
-$$SUDO -u ytd git config --global --add safe.directory $deployPath
+`$SUDO -u ytd git config --global --add safe.directory $deployPath
 
 echo '  [4/10] Pulling latest code from GitHub...'
-$$SUDO -u ytd git fetch origin
-$$SUDO -u ytd git reset --hard origin/$branch
+`$SUDO -u ytd git fetch origin
+`$SUDO -u ytd git reset --hard origin/$branch
 
 echo '  [5/10] Fixing ownership and permissions...'
-$$SUDO chown -R ytd:ytd $deployPath
-$$SUDO chmod -R u+rwX,go+rX $deployPath
+`$SUDO chown -R ytd:ytd $deployPath
+`$SUDO chmod -R u+rwX,go+rX $deployPath
 
 echo '  [6/10] Recreating virtual environment with Python 3.13...'
 rm -rf $deployPath/.venv
-$$SUDO -u ytd python3.13 -m venv $deployPath/.venv
+`$SUDO -u ytd python3.13 -m venv $deployPath/.venv
 
 echo '  [7/10] Upgrading pip...'
-$$SUDO -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
+`$SUDO -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
 
 echo '  [8/10] Installing/updating dependencies...'
-$$SUDO -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
+`$SUDO -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
 
 echo '  [9/10] Restarting services...'
 systemctl restart ytd-api ytd-worker ytd-beat
