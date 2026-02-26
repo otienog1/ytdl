@@ -129,19 +129,19 @@ else
     fi
 fi
 
-echo '  [2/10] Fixing ownership and permissions...'
-chown -R ytd:ytd $DEPLOY_PATH
-chmod -R u+rwX,go+rX $DEPLOY_PATH
-
-echo '  [3/10] Navigating to deployment directory...'
+echo '  [2/10] Navigating to deployment directory...'
 cd $DEPLOY_PATH
 
-echo '  [4/10] Configuring git safe directory...'
+echo '  [3/10] Configuring git safe directory...'
 git config --global --add safe.directory $DEPLOY_PATH
 
-echo '  [5/10] Pulling latest code from GitHub...'
+echo '  [4/10] Pulling latest code from GitHub...'
 git fetch origin
 git reset --hard origin/$BRANCH
+
+echo '  [5/10] Fixing ownership and permissions...'
+chown -R ytd:ytd $DEPLOY_PATH
+chmod -R u+rwX,go+rX $DEPLOY_PATH
 
 echo '  [6/10] Recreating virtual environment with Python 3.13...'
 rm -rf $DEPLOY_PATH/.venv
