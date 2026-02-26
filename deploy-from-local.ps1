@@ -157,9 +157,24 @@ function Deploy-ToServer {
             Invoke-SSHCommand -SSHHost $sshHost -SSHKey $sshKey -UseSudo $useSudo -Command "systemctl is-active redis-server || systemctl start redis-server"
         }
 
-        # Deploy backend .env.production configuration
-        Write-Step "[4/8] Deploying backend configuration..."
+        # Upload and deploy backend .env.production configuration
+        Write-Step "[4/8] Uploading and deploying backend configuration..."
         $backupDate = Get-Date -Format "yyyyMMdd_HHmmss"
+
+        # Check if .env.production.server* exists locally
+        $localEnvFile = Join-Path $PSScriptRoot ".env.production.server$ServerNum"
+        if (-not (Test-Path $localEnvFile)) {
+            Write-Error-Message "Local file not found: .env.production.server$ServerNum"
+            Write-Warning-Message "Please create this file in the backend-python directory"
+            return $false
+        }
+
+        # Upload .env.production.server* to server
+        $sshArgs = if ($sshKey) { "-i `"$sshKey`"" } else { "" }
+        $scpCmd = "scp $sshArgs `"$localEnvFile`" $($sshHost):/opt/ytdl/backend-python/.env.production.server$ServerNum"
+        Invoke-Expression $scpCmd
+
+        # Deploy on server
         Invoke-SSHCommand -SSHHost $sshHost -SSHKey $sshKey -UseSudo $useSudo -Command "bash -c 'cd /opt/ytdl/backend-python && if [ -f .env.production ]; then cp .env.production .env.production.backup.$backupDate; fi && cp .env.production.server$ServerNum .env.production && chown ytdl:ytdl .env.production && chmod 600 .env.production'"
         if ($LASTEXITCODE -ne 0) {
             Write-Error-Message "Failed to deploy backend configuration"
@@ -167,14 +182,26 @@ function Deploy-ToServer {
         }
         Write-Success "Backend .env.production deployed"
 
-        # Deploy cookie extractor .env.production configuration
-        Write-Step "[5/8] Deploying cookie extractor configuration..."
-        Invoke-SSHCommand -SSHHost $sshHost -SSHKey $sshKey -UseSudo $useSudo -Command "bash -c 'cd /opt/ytdl/cookie-extractor && if [ -f .env.production ]; then cp .env.production .env.production.backup.$backupDate; fi && cp .env.production.server$ServerNum .env.production && chown ytdl:ytdl .env.production && chmod 600 .env.production'"
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error-Message "Failed to deploy cookie extractor configuration"
-            return $false
+        # Upload and deploy cookie extractor .env.production configuration
+        Write-Step "[5/8] Uploading and deploying cookie extractor configuration..."
+
+        # Check if cookie-extractor .env file exists locally
+        $cookieEnvFile = Join-Path (Split-Path $PSScriptRoot -Parent) "cookie-extractor\.env.production.server$ServerNum"
+        if (-not (Test-Path $cookieEnvFile)) {
+            Write-Warning-Message "Cookie extractor .env file not found, skipping"
+        } else {
+            # Upload cookie extractor .env file
+            $scpCmd = "scp $sshArgs `"$cookieEnvFile`" $($sshHost):/opt/ytdl/cookie-extractor/.env.production.server$ServerNum"
+            Invoke-Expression $scpCmd
+
+            # Deploy on server
+            Invoke-SSHCommand -SSHHost $sshHost -SSHKey $sshKey -UseSudo $useSudo -Command "bash -c 'cd /opt/ytdl/cookie-extractor && if [ -f .env.production ]; then cp .env.production .env.production.backup.$backupDate; fi && cp .env.production.server$ServerNum .env.production && chown ytdl:ytdl .env.production && chmod 600 .env.production'"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error-Message "Failed to deploy cookie extractor configuration"
+                return $false
+            }
+            Write-Success "Cookie extractor .env.production deployed"
         }
-        Write-Success "Cookie extractor .env.production deployed"
 
         # Restart backend services
         Write-Step "[6/8] Restarting backend services..."
