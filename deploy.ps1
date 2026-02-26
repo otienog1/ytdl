@@ -105,23 +105,23 @@ foreach ($server in $servers) {
     Write-ServerHeader -Name $server.Name
 
     try {
-        # Build the deployment commands - use string substitution for PowerShell vars
-        $cmd1 = @"
+        # Build bash script content using single-quote here-string (no PowerShell expansion)
+        $bashScript = @'
 set -e
 export DEBIAN_FRONTEND=noninteractive
 
-if [ "`$(id -u)" = "0" ]; then
+if [ "$(id -u)" = "0" ]; then
     SUDO=""
 else
     SUDO="sudo"
 fi
 
 echo '  [1/10] Checking Python version...'
-PYTHON_VERSION=`$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
+PYTHON_VERSION=$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
 REQUIRED_VERSION='3.13'
 
-if [ "`$(printf '%s\n' "`$REQUIRED_VERSION" "`$PYTHON_VERSION" | sort -V | head -n1)" != "`$REQUIRED_VERSION" ]; then
-    echo "  Python version is `$PYTHON_VERSION, upgrading to 3.13..."
+if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$PYTHON_VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
+    echo "  Python version is $PYTHON_VERSION, upgrading to 3.13..."
     apt-get update -qq
     apt-get install -y software-properties-common -qq
     add-apt-repository -y ppa:deadsnakes/ppa
@@ -131,7 +131,7 @@ if [ "`$(printf '%s\n' "`$REQUIRED_VERSION" "`$PYTHON_VERSION" | sort -V | head 
     update-alternatives --set python3 /usr/bin/python3.13
     echo '  Python upgraded to 3.13'
 else
-    echo "  Python version `$PYTHON_VERSION is compatible"
+    echo "  Python version $PYTHON_VERSION is compatible"
     if ! dpkg -l | grep -q python-is-python3; then
         echo '  Installing python-is-python3 package...'
         apt-get update -qq
@@ -140,28 +140,28 @@ else
 fi
 
 echo '  [2/10] Navigating to deployment directory...'
-cd $deployPath
+cd DEPLOYPATH_PLACEHOLDER
 
 echo '  [3/10] Configuring git safe directory...'
-`$SUDO -u ytd git config --global --add safe.directory $deployPath
+$SUDO -u ytd git config --global --add safe.directory DEPLOYPATH_PLACEHOLDER
 
 echo '  [4/10] Pulling latest code from GitHub...'
-`$SUDO -u ytd git fetch origin
-`$SUDO -u ytd git reset --hard origin/$branch
+$SUDO -u ytd git fetch origin
+$SUDO -u ytd git reset --hard origin/BRANCH_PLACEHOLDER
 
 echo '  [5/10] Fixing ownership and permissions...'
-`$SUDO chown -R ytd:ytd $deployPath
-`$SUDO chmod -R u+rwX,go+rX $deployPath
+$SUDO chown -R ytd:ytd DEPLOYPATH_PLACEHOLDER
+$SUDO chmod -R u+rwX,go+rX DEPLOYPATH_PLACEHOLDER
 
 echo '  [6/10] Recreating virtual environment with Python 3.13...'
-rm -rf $deployPath/.venv
-`$SUDO -u ytd python3.13 -m venv $deployPath/.venv
+rm -rf DEPLOYPATH_PLACEHOLDER/.venv
+$SUDO -u ytd python3.13 -m venv DEPLOYPATH_PLACEHOLDER/.venv
 
 echo '  [7/10] Upgrading pip...'
-`$SUDO -u ytd $deployPath/.venv/bin/pip install --upgrade pip --quiet
+$SUDO -u ytd DEPLOYPATH_PLACEHOLDER/.venv/bin/pip install --upgrade pip --quiet
 
 echo '  [8/10] Installing/updating dependencies...'
-`$SUDO -u ytd $deployPath/.venv/bin/pip install -r requirements.txt --quiet
+$SUDO -u ytd DEPLOYPATH_PLACEHOLDER/.venv/bin/pip install -r requirements.txt --quiet
 
 echo '  [9/10] Restarting services...'
 systemctl restart ytd-api ytd-worker ytd-beat
@@ -175,11 +175,14 @@ else
     systemctl status ytd-api ytd-worker ytd-beat --no-pager
     exit 1
 fi
-"@
+'@
+
+        # Replace placeholders with actual PowerShell variables
+        $bashScript = $bashScript.Replace('DEPLOYPATH_PLACEHOLDER', $deployPath).Replace('BRANCH_PLACEHOLDER', $branch)
 
         Write-Step "  Executing deployment commands..."
 
-        $result = Invoke-SSHCommand -SSHHost $server.Host -Command $cmd1 -SSHKey $server.SSHKey
+        $result = Invoke-SSHCommand -SSHHost $server.Host -Command "bash -c '$bashScript'" -SSHKey $server.SSHKey
 
         if ($result.ExitCode -eq 0) {
             Write-Success "  Deployment to $($server.Name) completed successfully"
