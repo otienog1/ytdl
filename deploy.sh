@@ -90,23 +90,66 @@ for ((i=0; i<server_count; i++)); do
     deploy_commands="
 set -e
 
-echo '  [1/6] Navigating to deployment directory...'
+echo '  [1/9] Checking Python version...'
+PYTHON_VERSION=\$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
+REQUIRED_VERSION='3.13'
+
+if [ \"\$(printf '%s\n' \"\$REQUIRED_VERSION\" \"\$PYTHON_VERSION\" | sort -V | head -n1)\" != \"\$REQUIRED_VERSION\" ]; then
+    echo '  Python version is \$PYTHON_VERSION, upgrading to 3.13...'
+
+    # Update package list
+    apt-get update -qq
+
+    # Install software-properties-common for add-apt-repository
+    apt-get install -y software-properties-common -qq
+
+    # Add deadsnakes PPA for Python 3.13
+    add-apt-repository -y ppa:deadsnakes/ppa
+    apt-get update -qq
+
+    # Install Python 3.13 and required packages
+    apt-get install -y python3.13 python3.13-venv python3.13-dev python-is-python3 -qq
+
+    # Update alternatives to make python3.13 the default python3
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.13 1
+    update-alternatives --set python3 /usr/bin/python3.13
+
+    echo '  Python upgraded to 3.13'
+else
+    echo '  Python version \$PYTHON_VERSION is compatible'
+
+    # Ensure python-is-python3 is installed
+    if ! dpkg -l | grep -q python-is-python3; then
+        echo '  Installing python-is-python3 package...'
+        apt-get update -qq
+        apt-get install -y python-is-python3 -qq
+    fi
+fi
+
+echo '  [2/9] Navigating to deployment directory...'
 cd $DEPLOY_PATH
 
-echo '  [2/6] Pulling latest code from GitHub...'
+echo '  [3/9] Pulling latest code from GitHub...'
 git fetch origin
 git reset --hard origin/$BRANCH
 
-echo '  [3/6] Fixing ownership...'
+echo '  [4/9] Fixing ownership...'
 chown -R ytd:ytd $DEPLOY_PATH
 
-echo '  [4/6] Installing/updating dependencies...'
+echo '  [5/9] Recreating virtual environment with Python 3.13...'
+rm -rf $DEPLOY_PATH/.venv
+sudo -u ytd python3.13 -m venv $DEPLOY_PATH/.venv
+
+echo '  [6/9] Upgrading pip...'
+sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install --upgrade pip --quiet
+
+echo '  [7/9] Installing/updating dependencies...'
 sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install -r requirements.txt --quiet
 
-echo '  [5/6] Restarting services...'
+echo '  [8/9] Restarting services...'
 systemctl restart ytd-api ytd-worker
 
-echo '  [6/6] Checking service status...'
+echo '  [9/9] Checking service status...'
 sleep 3
 if systemctl is-active --quiet ytd-api && systemctl is-active --quiet ytd-worker; then
     echo '  Services running successfully'
