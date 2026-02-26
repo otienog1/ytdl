@@ -10,9 +10,9 @@ WebSocket closed: 1006
 
 ## 🔍 Root Causes
 
-1. **Wrong GCP IP in nginx** - Was `35.193.12.77`, should be `34.57.68.120`
-2. **Backend services not running**
-3. **Nginx config not reloaded**
+1. **Backend services not running**
+2. **Nginx config not deployed/reloaded**
+3. **Firewall or network issues**
 
 ## ✅ Quick Fix (Run on ytd.timobosafaris.com)
 
@@ -60,7 +60,7 @@ curl -I https://ytd.timobosafaris.com/api/health/
 ```bash
 # Test each backend server
 curl -I http://127.0.0.1:3001/api/health/
-curl -I http://34.57.68.120:3001/api/health/
+curl -I http://35.193.12.77:3001/api/health/
 curl -I http://13.60.71.187:3001/api/health/
 # All should return: HTTP/1.1 200 OK
 ```
@@ -81,8 +81,8 @@ upstream ytd_backend {
     ip_hash;
 
     server 127.0.0.1:3001 max_fails=2 fail_timeout=30s;
-    server 34.57.68.120:3001 max_fails=2 fail_timeout=30s;  # FIXED: was 35.193.12.77
-    server 13.60.71.187:3001 max_fails=2 fail_timeout=30s;
+    server 35.193.12.77:3001 max_fails=2 fail_timeout=30s;  # GCP server
+    server 13.60.71.187:3001 max_fails=2 fail_timeout=30s;  # AWS server
 
     keepalive 32;
 }

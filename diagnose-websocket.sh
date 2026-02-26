@@ -75,7 +75,7 @@ grep -A 10 "upstream ytd_backend" /etc/nginx/sites-available/ytd | grep "server 
 
 echo ""
 echo "Testing connectivity to each backend:"
-for server in "127.0.0.1:3001" "34.57.68.120:3001" "13.60.71.187:3001"; do
+for server in "127.0.0.1:3001" "35.193.12.77:3001" "13.60.71.187:3001"; do
     if timeout 5 bash -c "echo > /dev/tcp/${server%:*}/${server#*:}" 2>/dev/null; then
         echo "✅ $server is reachable"
     else
