@@ -62,12 +62,12 @@ bash install-local-redis.sh
 
 # 3. Deploy config (replace '1' with '2' or '3' for other servers)
 cd backend-python
-sudo cp .env.production.server1 .env
-sudo chown ytdl:ytdl .env
+sudo cp .env.production.server1 .env.production
+sudo chown ytdl:ytdl .env.production
 
 cd ../cookie-extractor
-sudo cp .env.production.server1 .env
-sudo chown ytdl:ytdl .env
+sudo cp .env.production.server1 .env.production
+sudo chown ytdl:ytdl .env.production
 
 # 4. Restart services
 sudo systemctl restart ytd-api ytd-worker ytd-beat ytd-cookie-extractor
@@ -133,7 +133,7 @@ redis-cli ping
 ### Wrong Configuration
 ```bash
 cd /opt/ytdl/backend-python
-cat .env | grep YT_ACCOUNT_ID
+cat .env.production | grep YT_ACCOUNT_ID
 # Server 1: account_a
 # Server 2: account_b
 # Server 3: account_c
@@ -152,9 +152,9 @@ cat .env | grep YT_ACCOUNT_ID
 If something goes wrong:
 
 ```bash
-# Restore backup .env
+# Restore backup .env.production
 cd /opt/ytdl/backend-python
-sudo cp .env.backup.* .env
+sudo cp .env.production.backup.* .env.production
 
 # Restart services
 sudo systemctl restart ytd-api ytd-worker ytd-beat

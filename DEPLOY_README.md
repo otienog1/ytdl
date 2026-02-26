@@ -141,7 +141,7 @@ ssh root@<server-ip> "journalctl -xe"
 
 ```bash
 # Check which account is configured
-ssh root@<server-ip> "cat /opt/ytdl/backend-python/.env | grep YT_ACCOUNT_ID"
+ssh root@<server-ip> "cat /opt/ytdl/backend-python/.env.production | grep YT_ACCOUNT_ID"
 
 # Should be:
 # Server 1: account_a
@@ -167,7 +167,7 @@ If something goes wrong:
 # On each server
 ssh root@<server-ip>
 cd /opt/ytdl/backend-python
-sudo cp .env.backup.* .env
+sudo cp .env.production.backup.* .env.production
 sudo systemctl restart ytd-api ytd-worker ytd-beat
 ```
 

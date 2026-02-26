@@ -85,25 +85,25 @@ deploy_to_server() {
         ssh "$ssh_host" "systemctl is-active redis-server || systemctl start redis-server"
     fi
 
-    # Deploy backend .env configuration
+    # Deploy backend .env.production configuration
     echo ""
     echo "[5/9] Deploying backend configuration..."
     ssh "$ssh_host" "cd /opt/ytdl/backend-python && \
-        if [ -f .env ]; then cp .env .env.backup.\$(date +%Y%m%d_%H%M%S); fi && \
-        cp .env.production.server${server_num} .env && \
-        chown ytdl:ytdl .env && \
-        chmod 600 .env"
-    echo "✅ Backend .env deployed"
+        if [ -f .env.production ]; then cp .env.production .env.production.backup.\$(date +%Y%m%d_%H%M%S); fi && \
+        cp .env.production.server${server_num} .env.production && \
+        chown ytdl:ytdl .env.production && \
+        chmod 600 .env.production"
+    echo "✅ Backend .env.production deployed"
 
-    # Deploy cookie extractor .env configuration
+    # Deploy cookie extractor .env.production configuration
     echo ""
     echo "[6/9] Deploying cookie extractor configuration..."
     ssh "$ssh_host" "cd /opt/ytdl/cookie-extractor && \
-        if [ -f .env ]; then cp .env .env.backup.\$(date +%Y%m%d_%H%M%S); fi && \
-        cp .env.production.server${server_num} .env && \
-        chown ytdl:ytdl .env && \
-        chmod 600 .env"
-    echo "✅ Cookie extractor .env deployed"
+        if [ -f .env.production ]; then cp .env.production .env.production.backup.\$(date +%Y%m%d_%H%M%S); fi && \
+        cp .env.production.server${server_num} .env.production && \
+        chown ytdl:ytdl .env.production && \
+        chmod 600 .env.production"
+    echo "✅ Cookie extractor .env.production deployed"
 
     # Restart backend services
     echo ""

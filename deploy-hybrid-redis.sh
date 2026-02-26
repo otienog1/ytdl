@@ -86,34 +86,34 @@ echo ""
 echo "[5/8] Deploying backend configuration..."
 cd /opt/ytdl/backend-python
 
-# Backup existing .env if it exists
-if [ -f .env ]; then
-    cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
-    echo "✅ Backed up existing .env"
+# Backup existing .env.production if it exists
+if [ -f .env.production ]; then
+    cp .env.production .env.production.backup.$(date +%Y%m%d_%H%M%S)
+    echo "✅ Backed up existing .env.production"
 fi
 
-# Copy server-specific config
-cp .env.production.server${SERVER_NUM} .env
-chown ytdl:ytdl .env
-chmod 600 .env
-echo "✅ Deployed .env.production.server${SERVER_NUM} to .env"
+# Copy server-specific config to .env.production (overwrite)
+cp .env.production.server${SERVER_NUM} .env.production
+chown ytdl:ytdl .env.production
+chmod 600 .env.production
+echo "✅ Deployed .env.production.server${SERVER_NUM} to .env.production"
 
 # Step 6: Deploy cookie extractor .env configuration
 echo ""
 echo "[6/8] Deploying cookie extractor configuration..."
 cd /opt/ytdl/cookie-extractor
 
-# Backup existing .env if it exists
-if [ -f .env ]; then
-    cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
-    echo "✅ Backed up existing .env"
+# Backup existing .env.production if it exists
+if [ -f .env.production ]; then
+    cp .env.production .env.production.backup.$(date +%Y%m%d_%H%M%S)
+    echo "✅ Backed up existing .env.production"
 fi
 
-# Copy server-specific config
-cp .env.production.server${SERVER_NUM} .env
-chown ytdl:ytdl .env
-chmod 600 .env
-echo "✅ Deployed .env.production.server${SERVER_NUM} to .env"
+# Copy server-specific config to .env.production (overwrite)
+cp .env.production.server${SERVER_NUM} .env.production
+chown ytdl:ytdl .env.production
+chmod 600 .env.production
+echo "✅ Deployed .env.production.server${SERVER_NUM} to .env.production"
 
 # Step 7: Restart backend services
 echo ""
