@@ -1,6 +1,28 @@
 # Quick Deployment Guide - Hybrid Redis
 
-## 🚀 One-Command Deployment
+## 🚀 Deploy from Local Machine (Recommended)
+
+Run this on your **local Windows machine** to deploy to all servers at once:
+
+```bash
+# Windows (double-click or run from cmd)
+deploy-from-local.bat
+
+# Or using Git Bash / WSL
+bash deploy-from-local.sh
+```
+
+This will automatically:
+- Deploy to all 3 servers in sequence
+- Pull latest code
+- Install local Redis
+- Deploy configurations
+- Restart services
+- Run verification tests
+
+## 🔧 Deploy on Individual Server
+
+If you prefer to deploy on each server individually:
 
 ### Server 1 (ytd.timobosafaris.com)
 ```bash
@@ -40,11 +62,11 @@ bash install-local-redis.sh
 
 # 3. Deploy config (replace '1' with '2' or '3' for other servers)
 cd backend-python
-sudo cp .env.server1 .env
+sudo cp .env.production.server1 .env
 sudo chown ytdl:ytdl .env
 
 cd ../cookie-extractor
-sudo cp .env.server1 .env
+sudo cp .env.production.server1 .env
 sudo chown ytdl:ytdl .env
 
 # 4. Restart services
@@ -121,9 +143,9 @@ cat .env | grep YT_ACCOUNT_ID
 
 | Server | IP | Account | Config Files |
 |--------|----|---------| -------------|
-| Server 1 | 172.234.172.191 | A (otienog1@yahoo.com) | `.env.server1` |
-| Server 2 | 34.57.68.120 | B (otienog1@icluod.com) | `.env.server2` |
-| Server 3 | 13.60.71.187 | C (7plus8studios@gmail.com) | `.env.server3` |
+| Server 1 | 172.234.172.191 | A (otienog1@yahoo.com) | `.env.production.server1` |
+| Server 2 | 34.57.68.120 | B (otienog1@icluod.com) | `.env.production.server2` |
+| Server 3 | 13.60.71.187 | C (7plus8studios@gmail.com) | `.env.production.server3` |
 
 ## 🔄 Rollback
 

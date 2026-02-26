@@ -93,10 +93,10 @@ if [ -f .env ]; then
 fi
 
 # Copy server-specific config
-cp .env.server${SERVER_NUM} .env
+cp .env.production.server${SERVER_NUM} .env
 chown ytdl:ytdl .env
 chmod 600 .env
-echo "✅ Deployed .env.server${SERVER_NUM} to .env"
+echo "✅ Deployed .env.production.server${SERVER_NUM} to .env"
 
 # Step 6: Deploy cookie extractor .env configuration
 echo ""
@@ -110,10 +110,10 @@ if [ -f .env ]; then
 fi
 
 # Copy server-specific config
-cp .env.server${SERVER_NUM} .env
+cp .env.production.server${SERVER_NUM} .env
 chown ytdl:ytdl .env
 chmod 600 .env
-echo "✅ Deployed .env.server${SERVER_NUM} to .env"
+echo "✅ Deployed .env.production.server${SERVER_NUM} to .env"
 
 # Step 7: Restart backend services
 echo ""
