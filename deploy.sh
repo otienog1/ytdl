@@ -141,25 +141,44 @@ echo '  [2/10] Navigating to deployment directory...'
 cd $DEPLOY_PATH
 
 echo '  [3/10] Configuring git safe directory...'
-\$SUDO -u ytd git config --global --add safe.directory $DEPLOY_PATH
+if [ -z \"\$SUDO\" ]; then
+    su - ytd -c \"git config --global --add safe.directory $DEPLOY_PATH\"
+else
+    sudo -u ytd git config --global --add safe.directory $DEPLOY_PATH
+fi
 
 echo '  [4/10] Pulling latest code from GitHub...'
-\$SUDO -u ytd git fetch origin
-\$SUDO -u ytd git reset --hard origin/$BRANCH
+if [ -z \"\$SUDO\" ]; then
+    su - ytd -c \"cd $DEPLOY_PATH && git fetch origin && git reset --hard origin/$BRANCH\"
+else
+    sudo -u ytd bash -c \"cd $DEPLOY_PATH && git fetch origin && git reset --hard origin/$BRANCH\"
+fi
 
 echo '  [5/10] Fixing ownership and permissions...'
-\$SUDO chown -R ytd:ytd $DEPLOY_PATH
-\$SUDO chmod -R u+rwX,go+rX $DEPLOY_PATH
+chown -R ytd:ytd $DEPLOY_PATH
+chmod -R u+rwX,go+rX $DEPLOY_PATH
 
 echo '  [6/10] Recreating virtual environment with Python 3.13...'
 rm -rf $DEPLOY_PATH/.venv
-\$SUDO -u ytd python3.13 -m venv $DEPLOY_PATH/.venv
+if [ -z \"\$SUDO\" ]; then
+    su - ytd -c \"python3.13 -m venv $DEPLOY_PATH/.venv\"
+else
+    sudo -u ytd python3.13 -m venv $DEPLOY_PATH/.venv
+fi
 
 echo '  [7/10] Upgrading pip...'
-\$SUDO -u ytd $DEPLOY_PATH/.venv/bin/pip install --upgrade pip --quiet
+if [ -z \"\$SUDO\" ]; then
+    su - ytd -c \"$DEPLOY_PATH/.venv/bin/pip install --upgrade pip --quiet\"
+else
+    sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install --upgrade pip --quiet
+fi
 
 echo '  [8/10] Installing/updating dependencies...'
-\$SUDO -u ytd $DEPLOY_PATH/.venv/bin/pip install -r requirements.txt --quiet
+if [ -z \"\$SUDO\" ]; then
+    su - ytd -c \"$DEPLOY_PATH/.venv/bin/pip install -r $DEPLOY_PATH/requirements.txt --quiet\"
+else
+    sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install -r requirements.txt --quiet
+fi
 
 echo '  [9/10] Restarting services...'
 systemctl restart ytd-api ytd-worker ytd-beat
