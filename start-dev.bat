@@ -1,99 +1,88 @@
 @echo off
-echo Starting YouTube Shorts Downloader Python Backend...
+REM YouTube Downloader - Local Development Setup (Windows)
+REM This script sets up and starts the development environment
+
+echo.
+echo ============================================================
+echo   YouTube Downloader - Local Development
+echo ============================================================
 echo.
 
-REM Check if using pipenv or venv
-where pipenv >nul 2>nul
-if %errorlevel% equ 0 (
-    echo Using pipenv...
-    set USE_PIPENV=1
-) else (
-    echo Using venv...
-    set USE_PIPENV=0
+REM Check Python
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Python is not installed. Please install Python 3.11+
+    pause
+    exit /b 1
 )
 
-if %USE_PIPENV% equ 0 (
-    REM Standard venv setup
-    if not exist "venv\" (
-        echo Creating virtual environment...
-        python -m venv venv
-    )
+echo [OK] Python is installed
 
-    echo Activating virtual environment...
-    call venv\Scripts\activate
-
-    echo Installing dependencies...
-    pip install -r requirements.txt
+REM Create virtual environment
+if not exist "venv\" (
+    echo [INFO] Creating virtual environment...
+    python -m venv venv
+    echo [OK] Virtual environment created
 ) else (
-    REM Pipenv setup
-    echo Installing dependencies with pipenv...
-    pipenv install
+    echo [OK] Virtual environment exists
 )
 
-REM Setup local ffmpeg if not already done
-if not exist "bin\ffmpeg.exe" (
-    echo.
-    echo Setting up local ffmpeg binaries...
-    if %USE_PIPENV% equ 1 (
-        pipenv run python setup_ffmpeg.py
+REM Activate virtual environment and install dependencies
+echo [INFO] Installing dependencies...
+call venv\Scripts\activate.bat
+python -m pip install --upgrade pip --quiet
+pip install -r requirements.txt --quiet
+echo [OK] Dependencies installed
+
+REM Check .env file
+if not exist ".env" (
+    echo [WARNING] .env file not found!
+    if exist ".env.example" (
+        echo [INFO] Copying .env.example to .env...
+        copy .env.example .env
+        echo.
+        echo [WARNING] Please edit .env file with your configuration
+        echo Press any key to continue...
+        pause >nul
     ) else (
-        python setup_ffmpeg.py
+        echo [ERROR] .env file is required. Create one based on the README
+        pause
+        exit /b 1
     )
 )
 
-echo.
-echo ========================================
-echo Starting FastAPI server on port 3001...
-echo ========================================
-echo.
-
-REM Start FastAPI server with hot reload
-if %USE_PIPENV% equ 1 (
-    start "FastAPI Server" cmd /k "pipenv run uvicorn app.main:app --reload --port 3001"
-) else (
-    start "FastAPI Server" cmd /k "venv\Scripts\activate && uvicorn app.main:app --reload --port 3001"
+REM Kill existing processes on port 3001
+echo [INFO] Checking for processes on port 3001...
+for /f "tokens=5" %%a in ('netstat -aon ^| findstr :3001') do (
+    taskkill /F /PID %%a >nul 2>&1
 )
 
-REM Wait a moment for server to start
-timeout /t 3 /nobreak > nul
-
+REM Start services
 echo.
-echo ========================================
-echo Starting Celery worker...
-echo ========================================
+echo [INFO] Starting development services...
 echo.
 
-REM Start Celery worker in new window
-if %USE_PIPENV% equ 1 (
-    start "Celery Worker" cmd /k "pipenv run celery -A app.queue.celery_app worker --loglevel=info --pool=solo"
-) else (
-    start "Celery Worker" cmd /k "venv\Scripts\activate && celery -A app.queue.celery_app worker --loglevel=info --pool=solo"
-)
+REM Start FastAPI server
+echo [INFO] Starting FastAPI server on http://localhost:3001...
+start "FastAPI Server" cmd /c "venv\Scripts\activate && uvicorn app.main:app --host 0.0.0.0 --port 3001 --reload"
 
-REM Wait a moment for worker to start
-timeout /t 2 /nobreak > nul
+REM Wait a bit for API to start
+timeout /t 3 /nobreak >nul
 
-echo.
-echo ========================================
-echo Starting Celery Beat (Scheduler)...
-echo ========================================
-echo.
+REM Start Celery worker
+echo [INFO] Starting Celery worker...
+start "Celery Worker" cmd /c "venv\Scripts\activate && celery -A app.queue.celery_app worker --loglevel=info --pool=solo"
 
-REM Start Celery Beat for scheduled cleanup tasks
-if %USE_PIPENV% equ 1 (
-    start "Celery Beat" cmd /k "pipenv run celery -A app.queue.celery_app beat --loglevel=info"
-) else (
-    start "Celery Beat" cmd /k "venv\Scripts\activate && celery -A app.queue.celery_app beat --loglevel=info"
-)
+REM Wait for services to fully start
+timeout /t 2 /nobreak >nul
 
 echo.
-echo ========================================
-echo Backend services started!
-echo ========================================
-echo FastAPI Server: http://localhost:3001
-echo API Docs: http://localhost:3001/docs
-echo Celery Worker: Processing download tasks
-echo Celery Beat: Running cleanup tasks every 6-12 hours
+echo [OK] Development environment is running!
 echo.
-echo Press any key to stop all services...
-pause > nul
+echo   API Server:    http://localhost:3001
+echo   API Docs:      http://localhost:3001/docs
+echo   Health Check:  http://localhost:3001/api/health/
+echo.
+echo   Close the command windows to stop the services
+echo.
+pause
