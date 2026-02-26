@@ -113,18 +113,18 @@ set -e
 export DEBIAN_FRONTEND=noninteractive
 
 # Detect if running as root
-if [ "`$(id -u)" = "0" ]; then
+if [ "$$(id -u)" = "0" ]; then
     SUDO=""
 else
     SUDO="sudo"
 fi
 
 echo '  [1/10] Checking Python version...'
-PYTHON_VERSION=`$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')`
+PYTHON_VERSION=$$(python3 --version 2>&1 | grep -oP '3\.\d+' || echo '0.0')
 REQUIRED_VERSION='3.13'
 
-if [ "`$(printf '%s\n' "`$REQUIRED_VERSION" "`$PYTHON_VERSION" | sort -V | head -n1)" != "`$REQUIRED_VERSION" ]; then
-    echo '  Python version is `$PYTHON_VERSION, upgrading to 3.13...'
+if [ "$$(printf '%s\n' "$$REQUIRED_VERSION" "$$PYTHON_VERSION" | sort -V | head -n1)" != "$$REQUIRED_VERSION" ]; then
+    echo '  Python version is $$PYTHON_VERSION, upgrading to 3.13...'
 
     # Update package list
     apt-get update -qq
@@ -145,7 +145,7 @@ if [ "`$(printf '%s\n' "`$REQUIRED_VERSION" "`$PYTHON_VERSION" | sort -V | head 
 
     echo '  Python upgraded to 3.13'
 else
-    echo '  Python version `$PYTHON_VERSION is compatible'
+    echo '  Python version $$PYTHON_VERSION is compatible'
 
     # Ensure python-is-python3 is installed
     if ! dpkg -l | grep -q python-is-python3; then
