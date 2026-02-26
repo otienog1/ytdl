@@ -98,6 +98,9 @@ class YouTubeService:
                 if self.proxy:
                     cmd.extend(['--proxy', self.proxy])
 
+                # Add the video URL to the command
+                cmd.append(url)
+
                 # Use Popen to capture everything manually to avoid hidden failures
                 process = subprocess.Popen(
                     cmd,
