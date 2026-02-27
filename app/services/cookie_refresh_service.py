@@ -18,18 +18,19 @@ class CookieRefreshService:
                 settings.REDIS_URL,
                 decode_responses=True
             )
-            self.queue_name = "cookie-refresh"  # Must match the queue name in cookie-extractor
+            self.queue_name = "youtube:cookie:requests"  # Must match the queue name in cookie-worker.js
             logger.info("Cookie refresh service initialized with Redis")
         except Exception as e:
             logger.error(f"Failed to initialize cookie refresh service: {e}")
             self.redis_client = None
 
-    def trigger_cookie_refresh(self, reason: str = "expired_cookies") -> bool:
+    def trigger_cookie_refresh(self, reason: str = "expired_cookies", server_id: str = None) -> bool:
         """
-        Trigger a cookie refresh job by publishing to Bull queue
+        Trigger a cookie refresh job by publishing to Redis queue
 
         Args:
             reason: Reason for refresh (e.g., 'expired_cookies', 'missing_cookies', 'bot_detection')
+            server_id: Server ID to refresh cookies for (default: all servers)
 
         Returns:
             bool: True if job was queued successfully, False otherwise
@@ -39,64 +40,47 @@ class CookieRefreshService:
             return False
 
         try:
-            # Check if refresh already in progress for this account
-            account_id = settings.YT_ACCOUNT_ID
-            refresh_key = f"cookie:refresh:{account_id}:in_progress"
+            # Check if refresh already in progress
+            refresh_key = f"cookie:refresh:in_progress"
 
             if self.redis_client.get(refresh_key):
-                logger.info(f"Cookie refresh already in progress for account {account_id}, skipping")
+                logger.info(f"Cookie refresh already in progress, skipping")
                 return True
 
             # Set refresh flag with 5-minute expiry (TTL)
             self.redis_client.setex(refresh_key, 300, "1")
 
-            # Create job data
+            # Create job data matching cookie-worker.js expected format
             import time
-            job_data = {
-                "reason": reason,
-                "triggered_by": f"server_{account_id}",
-                "account_id": account_id,
-                "timestamp": int(time.time() * 1000)  # Bull uses milliseconds
-            }
+            import uuid
 
-            # Bull queue structure:
-            # - Jobs are stored in Redis list: bull:{queueName}:wait
-            # - Job ID counter: bull:{queueName}:id
-            # - Job data: bull:{queueName}:{jobId}
+            # Server IDs from servers.json
+            server_ids = ["backend-1", "backend-2", "backend-3"] if not server_id else [server_id]
 
-            # Get next job ID
-            job_id = self.redis_client.incr(f"bull:{self.queue_name}:id")
+            jobs_queued = 0
+            for sid in server_ids:
+                job_data = {
+                    "serverId": sid,
+                    "requestId": str(uuid.uuid4()),
+                    "reason": reason,
+                    "timestamp": int(time.time() * 1000)
+                }
 
-            # Store job data as hash
-            job_key = f"bull:{self.queue_name}:{job_id}"
-            job_payload = {
-                "data": json.dumps(job_data),
-                "opts": json.dumps({
-                    "attempts": 3,
-                    "backoff": {"type": "exponential", "delay": 1000},
-                    "timestamp": job_data["timestamp"]
-                }),
-                "timestamp": str(job_data["timestamp"]),
-                "name": "__default__",
-                "delay": "0",
-                "priority": "0"
-            }
+                # Simple queue structure used by cookie-worker.js
+                # Worker uses: brpop(queueName, timeout)
+                # So we use lpush to add to the left (FIFO: lpush + brpop)
+                self.redis_client.lpush(self.queue_name, json.dumps(job_data))
 
-            # Set job data
-            self.redis_client.hset(job_key, mapping=job_payload)
+                logger.info(f"✅ Cookie refresh job queued (server: {sid}, requestId: {job_data['requestId']}, reason: {reason})")
+                jobs_queued += 1
 
-            # Add job ID to wait queue
-            self.redis_client.lpush(f"bull:{self.queue_name}:wait", job_id)
-
-            logger.info(f"✅ Cookie refresh job created (ID: {job_id}, account: {job_data['account_id']}, reason: {reason})")
-            return True
+            return jobs_queued > 0
 
         except Exception as e:
             logger.error(f"Failed to trigger cookie refresh: {e}")
             # Clear the refresh flag on error
             try:
-                account_id = settings.YT_ACCOUNT_ID
-                self.redis_client.delete(f"cookie:refresh:{account_id}:in_progress")
+                self.redis_client.delete(f"cookie:refresh:in_progress")
             except:
                 pass
             return False
@@ -145,17 +129,12 @@ class CookieRefreshService:
             return {"error": "Redis not available"}
 
         try:
-            waiting = self.redis_client.llen(f"bull:{self.queue_name}:wait")
-            active = self.redis_client.llen(f"bull:{self.queue_name}:active")
-            completed = self.redis_client.llen(f"bull:{self.queue_name}:completed")
-            failed = self.redis_client.llen(f"bull:{self.queue_name}:failed")
+            # Simple queue structure - just count waiting jobs
+            waiting = self.redis_client.llen(self.queue_name)
 
             return {
                 "waiting": waiting,
-                "active": active,
-                "completed": completed,
-                "failed": failed,
-                "total": waiting + active + completed + failed
+                "queue_name": self.queue_name
             }
         except Exception as e:
             logger.error(f"Failed to get queue status: {e}")
