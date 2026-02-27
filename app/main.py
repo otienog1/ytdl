@@ -12,6 +12,7 @@ from app.config.database import connect_to_mongo, close_mongo_connection
 from app.config.redis_client import redis_client
 from app.middleware.rate_limit import limiter, _rate_limit_exceeded_handler
 from app.middleware.metrics_middleware import MetricsMiddleware
+from app.middleware.proxy_headers import ProxyHeadersMiddleware
 from app.routes import download, status as status_routes, history, storage_routes, websocket_routes, admin_routes, cookie_routes, health
 from app.utils.logger import logger
 from app.exceptions import AppException
@@ -47,6 +48,9 @@ app = FastAPI(
 # Add rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Proxy headers middleware (MUST be first to handle X-Forwarded-Proto)
+app.add_middleware(ProxyHeadersMiddleware)
 
 # CORS middleware
 app.add_middleware(

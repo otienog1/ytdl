@@ -1,0 +1,21 @@
+# Manual GCP Deployment Steps
+# Run these commands from your Windows machine (Git Bash)
+# IMPORTANT: These commands must be run from the backend-python directory
+
+# Step 1: Copy GCP credentials file to the server
+scp -i "/c/Users/7plus8/.ssh/google_compute_engine" "C:/Users/7plus8/build/ytd/backend-python/divine-actor-473706-k4-fdec9ee56ba0.json" 7plus8@35.193.12.77:~/gcp-credentials.json
+
+# Step 2: Run the deployment script ON THE SERVER (not locally!)
+# The script is piped through SSH to run on the remote server
+cat deploy-gcp-manual.sh | ssh -i "/c/Users/7plus8/.ssh/google_compute_engine" 7plus8@35.193.12.77 "bash -s"
+
+# DO NOT run ./deploy-gcp-manual.sh directly - that runs it locally on Windows!
+# Always use: cat deploy-gcp-manual.sh | ssh ...
+
+# That's it! The script will:
+# - Update Python to 3.13
+# - Pull latest code from GitHub
+# - Install dependencies with pipenv
+# - Copy GCP credentials to /opt/ytdl/gcp-credentials.json
+# - Restart all services
+# - Verify services are running

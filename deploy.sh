@@ -20,6 +20,7 @@ fi
 
 DEPLOY_PATH="/opt/ytdl"
 BRANCH="main"
+GCP_CREDENTIALS_FILE="$SCRIPT_DIR/divine-actor-473706-k4-fdec9ee56ba0.json"
 
 # ===================================================================
 # FUNCTIONS
@@ -48,10 +49,14 @@ ssh_exec() {
     local command=$2
     local ssh_key=$3
 
-    if [ -n "$ssh_key" ] && [ -f "$ssh_key" ]; then
-        ssh -o StrictHostKeyChecking=no -i "$ssh_key" "$host" "$command"
+    if [ -n "$ssh_key" ]; then
+        echo "$command" | ssh -o StrictHostKeyChecking=no \
+            -o IdentitiesOnly=yes \
+            -i "$ssh_key" \
+            "$host" "bash -s"
     else
-        ssh -o StrictHostKeyChecking=no "$host" "$command"
+        echo "$command" | ssh -o StrictHostKeyChecking=no \
+            "$host" "bash -s"
     fi
 }
 
@@ -72,12 +77,23 @@ if not config_path.exists():
     # Try with forward slashes for Git Bash on Windows
     config_path = Path('$CONFIG_FILE'.replace('/c/', 'C:/'))
 
+import re
+
 with open(config_path) as f:
     config = json.load(f)
     for server in config['servers']:
-        ssh_key = server.get('sshKey', '')
+        ssh_key = server.get('sshKey', '') or ''
         if ssh_key:
             ssh_key = os.path.expandvars(ssh_key)
+            # Convert Windows path to Git Bash format: C:\\path -> /c/path
+            # First convert backslashes to forward slashes
+            ssh_key = ssh_key.replace(chr(92), '/')
+            # Then convert drive letter: C:/ -> /c/
+            match = re.match(r'^([A-Za-z]):/(.*)', ssh_key)
+            if match:
+                drive = match.group(1).lower()
+                path = match.group(2)
+                ssh_key = f'/{drive}/{path}'
         print(f\"{server['host']}|{server['name']}|{ssh_key}\")
 ")
 
@@ -85,7 +101,27 @@ failed_servers=()
 
 while IFS='|' read -r host name ssh_key; do
 
+    # Skip GCP server (deploy manually)
+    if [[ "$name" == *"GCP"* ]]; then
+        info "Skipping $name (use deploy-gcp-manual.sh for manual deployment)"
+        echo ""
+        continue
+    fi
+
     print_server_header "$name"
+
+    # Copy GCP credentials file to server
+    info "  Copying GCP credentials..."
+    if [ -f "$GCP_CREDENTIALS_FILE" ]; then
+        if [ -n "$ssh_key" ]; then
+            scp -o StrictHostKeyChecking=no -o IdentitiesOnly=yes -i "$ssh_key" "$GCP_CREDENTIALS_FILE" "$host:~/gcp-credentials.json"
+        else
+            scp -o StrictHostKeyChecking=no "$GCP_CREDENTIALS_FILE" "$host:~/gcp-credentials.json"
+        fi
+        log "  GCP credentials copied"
+    else
+        error "  GCP credentials file not found: $GCP_CREDENTIALS_FILE"
+    fi
 
     # Build the deployment commands
     deploy_commands="
@@ -155,41 +191,53 @@ else
 fi
 
 echo '  [5/10] Fixing ownership and permissions...'
-chown -R ytd:ytd $DEPLOY_PATH
-chmod -R u+rwX,go+rX $DEPLOY_PATH
+\$SUDO chown -R ytd:ytd $DEPLOY_PATH
+\$SUDO chmod -R u+rwX,go+rX $DEPLOY_PATH
 
-echo '  [6/10] Recreating virtual environment with Python 3.13...'
-rm -rf $DEPLOY_PATH/.venv
-if [ -z \"\$SUDO\" ]; then
-    su - ytd -c \"python3.13 -m venv $DEPLOY_PATH/.venv\"
-else
-    sudo -u ytd python3.13 -m venv $DEPLOY_PATH/.venv
+echo '  [6/10] Installing pipenv...'
+if ! command -v pipenv &> /dev/null; then
+    echo '  pipenv not found, installing...'
+    if [ -z \"\$SUDO\" ]; then
+        su - ytd -c \"python3.13 -m pip install --user pipenv --quiet\"
+    else
+        sudo -u ytd python3.13 -m pip install --user pipenv --quiet
+    fi
 fi
 
-echo '  [7/10] Upgrading pip...'
+echo '  [7/10] Removing existing virtual environment...'
 if [ -z \"\$SUDO\" ]; then
-    su - ytd -c \"$DEPLOY_PATH/.venv/bin/pip install --upgrade pip --quiet\"
+    su - ytd -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv --rm || true\"
 else
-    sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install --upgrade pip --quiet
+    sudo -u ytd bash -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv --rm || true\"
 fi
 
-echo '  [8/10] Installing/updating dependencies...'
+echo '  [8/10] Installing dependencies with pipenv...'
 if [ -z \"\$SUDO\" ]; then
-    su - ytd -c \"$DEPLOY_PATH/.venv/bin/pip install -r $DEPLOY_PATH/requirements.txt --quiet\"
+    su - ytd -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy --quiet\"
 else
-    sudo -u ytd $DEPLOY_PATH/.venv/bin/pip install -r requirements.txt --quiet
+    sudo -u ytd bash -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy --quiet\"
 fi
 
-echo '  [9/10] Restarting services...'
-systemctl restart ytd-api ytd-worker ytd-beat
+echo '  [9/12] Copying GCP credentials file...'
+if [ -f ~/gcp-credentials.json ]; then
+    \$SUDO cp ~/gcp-credentials.json $DEPLOY_PATH/gcp-credentials.json
+    \$SUDO chown ytd:ytd $DEPLOY_PATH/gcp-credentials.json
+    \$SUDO chmod 600 $DEPLOY_PATH/gcp-credentials.json
+    echo '  GCP credentials copied successfully'
+else
+    echo '  WARNING: ~/gcp-credentials.json not found, skipping...'
+fi
 
-echo '  [10/10] Checking service status...'
+echo '  [10/12] Restarting services...'
+\$SUDO systemctl restart ytd-api ytd-worker ytd-beat
+
+echo '  [11/12] Checking service status...'
 sleep 3
-if systemctl is-active --quiet ytd-api && systemctl is-active --quiet ytd-worker && systemctl is-active --quiet ytd-beat; then
+if \$SUDO systemctl is-active --quiet ytd-api && \$SUDO systemctl is-active --quiet ytd-worker && \$SUDO systemctl is-active --quiet ytd-beat; then
     echo '  Services running successfully'
 else
     echo '  ERROR: Services failed to start'
-    systemctl status ytd-api ytd-worker ytd-beat --no-pager
+    \$SUDO systemctl status ytd-api ytd-worker ytd-beat --no-pager
     exit 1
 fi
 "
