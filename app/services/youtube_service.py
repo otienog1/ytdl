@@ -55,18 +55,25 @@ class YouTubeService:
 
     def _handle_cookie_error(self, error_message: str, video_id: str):
         """Enhanced error handler to trigger cookie refresh when needed"""
-        # If stderr is empty, we likely had a networking/IP drop
-        if not error_message:
-            logger.error("YT-DLP returned empty stderr. Possible IP block or SSL handshake failure.")
+        try:
+            # If stderr is empty, we likely had a networking/IP drop
+            if not error_message:
+                logger.error("YT-DLP returned empty stderr. Possible IP block or SSL handshake failure.")
+                return False
+
+            logger.debug(f"Checking if cookie refresh needed for error: {error_message[:100]}")
+
+            if cookie_refresh_service.is_cookie_refresh_needed(error_message):
+                logger.warning(f"🔄 Cookie refresh required for {self.account_id}: {error_message[:150]}")
+                cookie_refresh_service.trigger_cookie_refresh(reason="bot_detection")
+                logger.info(f"✅ Cookie refresh triggered for bot detection on video {video_id}")
+                return True
+
+            logger.debug(f"Cookie refresh not needed for this error")
             return False
-
-        if cookie_refresh_service.is_cookie_refresh_needed(error_message):
-            logger.warning(f"🔄 Cookie refresh required for {self.account_id}: {error_message[:150]}")
-            cookie_refresh_service.trigger_cookie_refresh(reason="bot_detection")
-            logger.info(f"✅ Cookie refresh triggered for bot detection on video {video_id}")
-            return True
-
-        return False
+        except Exception as e:
+            logger.error(f"Error in _handle_cookie_error: {e}", exc_info=True)
+            return False
 
     async def get_video_info(self, url: str, cookies: Optional[Dict[str, str]] = None) -> VideoInfo:
         """Optimized for 1GB RAM and multi-server cookie stability"""
