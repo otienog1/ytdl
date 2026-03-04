@@ -112,7 +112,9 @@ class CookieRefreshService:
             "request blocked",
         ]
 
-        error_lower = error_message.lower()
+        # Normalize fancy Unicode apostrophes to regular ASCII apostrophes
+        # YouTube uses RIGHT SINGLE QUOTATION MARK (U+2019 ') instead of regular apostrophe (')
+        error_lower = error_message.lower().replace('\u2019', "'").replace('\u2018', "'")
 
         # Debug: check if key phrases exist
         has_sign_in = "sign in" in error_lower
