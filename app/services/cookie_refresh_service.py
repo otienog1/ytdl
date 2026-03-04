@@ -113,11 +113,18 @@ class CookieRefreshService:
         ]
 
         error_lower = error_message.lower()
+
+        # Debug: check if key phrases exist
+        has_sign_in = "sign in" in error_lower
+        has_bot = "bot" in error_lower
+        has_confirm = "confirm" in error_lower
+
+        logger.debug(f"is_cookie_refresh_needed: len={len(error_lower)}, has_sign_in={has_sign_in}, has_bot={has_bot}, has_confirm={has_confirm}")
+        logger.debug(f"is_cookie_refresh_needed: error_lower[:300]='{error_lower[:300]}'")
+
         matches = [pattern for pattern in cookie_error_patterns if pattern in error_lower]
         result = len(matches) > 0
 
-        # Debug: show first 200 chars of error message
-        logger.debug(f"is_cookie_refresh_needed: error_lower[:200]='{error_lower[:200]}'")
         logger.debug(f"is_cookie_refresh_needed: matches={matches}, result={result}")
 
         return result
