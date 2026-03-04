@@ -54,17 +54,19 @@ class YouTubeService:
             return None
 
     def _handle_cookie_error(self, error_message: str, video_id: str):
-        """Enhanced error handler to bubble up specific cookie issues"""
+        """Enhanced error handler to trigger cookie refresh when needed"""
         # If stderr is empty, we likely had a networking/IP drop
         if not error_message:
             logger.error("YT-DLP returned empty stderr. Possible IP block or SSL handshake failure.")
-            return
+            return False
 
         if cookie_refresh_service.is_cookie_refresh_needed(error_message):
             logger.warning(f"🔄 Cookie refresh required for {self.account_id}: {error_message[:150]}")
             cookie_refresh_service.trigger_cookie_refresh(reason="bot_detection")
-            # This specific message will now be returned to the frontend
-            raise CookieUnavailableError(self.account_id, reason=f"YouTube blocked session: {error_message[:50]}")
+            logger.info(f"✅ Cookie refresh triggered for bot detection on video {video_id}")
+            return True
+
+        return False
 
     async def get_video_info(self, url: str, cookies: Optional[Dict[str, str]] = None) -> VideoInfo:
         """Optimized for 1GB RAM and multi-server cookie stability"""
@@ -120,10 +122,18 @@ class YouTubeService:
 
                 if process.returncode != 0:
                     logger.error(f"yt-dlp error output: {stderr}")
-                    self._handle_cookie_error(stderr, video_id)
-                    
+                    cookie_refresh_triggered = self._handle_cookie_error(stderr, video_id)
+
                     if "Video unavailable" in stderr:
                         raise VideoNotFoundError(video_id, "Video is unavailable")
+
+                    # If cookie refresh was triggered, provide a helpful message
+                    if cookie_refresh_triggered:
+                        raise CookieUnavailableError(
+                            self.account_id,
+                            reason="YouTube bot detection triggered. Cookie refresh in progress. Please try again in a few minutes."
+                        )
+
                     # Return the actual yt-dlp error so we can see it on frontend
                     raise VideoDownloadError(video_id, f"YT-DLP: {stderr.splitlines()[-1] if stderr else 'Unknown Error'}")
 
