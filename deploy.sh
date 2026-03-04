@@ -204,21 +204,14 @@ if ! command -v pipenv &> /dev/null; then
     fi
 fi
 
-echo '  [7/10] Removing existing virtual environment...'
+echo '  [7/10] Syncing dependencies with pipenv...'
 if [ -z \"\$SUDO\" ]; then
-    su - ytd -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv --rm || true\"
+    su - ytd -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv sync --quiet\"
 else
-    sudo -u ytd bash -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv --rm || true\"
+    sudo -u ytd bash -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv sync --quiet\"
 fi
 
-echo '  [8/10] Installing dependencies with pipenv...'
-if [ -z \"\$SUDO\" ]; then
-    su - ytd -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy --quiet\"
-else
-    sudo -u ytd bash -c \"cd $DEPLOY_PATH && PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy --quiet\"
-fi
-
-echo '  [9/12] Copying GCP credentials file...'
+echo '  [8/10] Copying GCP credentials file...'
 if [ -f ~/gcp-credentials.json ]; then
     \$SUDO cp ~/gcp-credentials.json $DEPLOY_PATH/gcp-credentials.json
     \$SUDO chown ytd:ytd $DEPLOY_PATH/gcp-credentials.json
@@ -228,10 +221,10 @@ else
     echo '  WARNING: ~/gcp-credentials.json not found, skipping...'
 fi
 
-echo '  [10/12] Restarting services...'
+echo '  [9/10] Restarting services...'
 \$SUDO systemctl restart ytd-api ytd-worker ytd-beat
 
-echo '  [11/12] Checking service status...'
+echo '  [10/10] Checking service status...'
 sleep 3
 if \$SUDO systemctl is-active --quiet ytd-api && \$SUDO systemctl is-active --quiet ytd-worker && \$SUDO systemctl is-active --quiet ytd-beat; then
     echo '  Services running successfully'

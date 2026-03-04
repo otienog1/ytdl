@@ -73,13 +73,10 @@ if ! command -v pipenv &> /dev/null; then
     $SUDO -u ytd python3.13 -m pip install --user pipenv --quiet
 fi
 
-echo '[8/10] Removing existing virtual environment...'
-$SUDO -u ytd bash -c "cd /opt/ytdl && PIPENV_VENV_IN_PROJECT=1 pipenv --rm || true"
+echo '[8/10] Syncing dependencies with pipenv...'
+$SUDO -u ytd bash -c "cd /opt/ytdl && PIPENV_VENV_IN_PROJECT=1 pipenv sync --quiet"
 
-echo '[9/10] Installing dependencies with pipenv...'
-$SUDO -u ytd bash -c "cd /opt/ytdl && PIPENV_VENV_IN_PROJECT=1 pipenv install --deploy --quiet"
-
-echo '[10/12] Copying GCP credentials file...'
+echo '[9/10] Copying GCP credentials file...'
 if [ -f ~/gcp-credentials.json ]; then
     $SUDO cp ~/gcp-credentials.json /opt/ytdl/gcp-credentials.json
     $SUDO chown ytd:ytd /opt/ytdl/gcp-credentials.json
@@ -89,10 +86,10 @@ else
     echo 'WARNING: ~/gcp-credentials.json not found, skipping...'
 fi
 
-echo '[11/12] Restarting services...'
+echo '[10/10] Restarting services...'
 $SUDO systemctl restart ytd-api ytd-worker ytd-beat
 
-echo '[12/12] Checking service status...'
+echo 'Checking service status...'
 sleep 3
 if $SUDO systemctl is-active --quiet ytd-api && $SUDO systemctl is-active --quiet ytd-worker && $SUDO systemctl is-active --quiet ytd-beat; then
     echo 'Services running successfully'

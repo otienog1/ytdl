@@ -82,6 +82,15 @@ class YouTubeService:
             temp_cookies_file = None
 
             try:
+                # Check if cookies file is configured but missing - trigger refresh
+                if self.cookies_file and not os.path.exists(self.cookies_file) and not cookies:
+                    logger.warning(f"🔄 Cookie file not found at {self.cookies_file}, triggering refresh")
+                    cookie_refresh_service.trigger_cookie_refresh(reason="missing_cookies")
+                    raise CookieUnavailableError(
+                        self.account_id,
+                        reason="Cookie file not found. Cookie refresh in progress. Please try again in a few minutes."
+                    )
+
                 # 'nice' gives the OS/Redis priority over yt-dlp
                 cmd = ['nice', '-n', '10', self.yt_dlp_path, '--dump-json', '--no-playlist', '--flat-playlist']
                 cmd.extend(["--js-runtimes", "node", "--remote-components", "ejs:github"])
@@ -166,6 +175,15 @@ class YouTubeService:
         with metrics_tracker.track_youtube_api('download_video'):
             temp_cookies_file = None
             try:
+                # Check if cookies file is configured but missing - trigger refresh
+                if self.cookies_file and not os.path.exists(self.cookies_file) and not cookies:
+                    logger.warning(f"🔄 Cookie file not found at {self.cookies_file}, triggering refresh")
+                    cookie_refresh_service.trigger_cookie_refresh(reason="missing_cookies")
+                    raise CookieUnavailableError(
+                        self.account_id,
+                        reason="Cookie file not found. Cookie refresh in progress. Please try again in a few minutes."
+                    )
+
                 file_name = f"{video_id}_{uuid.uuid4().hex[:8]}.mp4"
                 output_path = self.download_dir / file_name
 
