@@ -113,7 +113,12 @@ class CookieRefreshService:
         ]
 
         error_lower = error_message.lower()
-        return any(pattern in error_lower for pattern in cookie_error_patterns)
+        matches = [pattern for pattern in cookie_error_patterns if pattern in error_lower]
+        result = len(matches) > 0
+
+        logger.debug(f"is_cookie_refresh_needed: error_message length={len(error_message)}, matches={matches}, result={result}")
+
+        return result
 
     def check_cookies_file_exists(self) -> bool:
         """Check if cookies file exists"""
