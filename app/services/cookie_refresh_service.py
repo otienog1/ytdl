@@ -116,7 +116,9 @@ class CookieRefreshService:
         matches = [pattern for pattern in cookie_error_patterns if pattern in error_lower]
         result = len(matches) > 0
 
-        logger.debug(f"is_cookie_refresh_needed: error_message length={len(error_message)}, matches={matches}, result={result}")
+        # Debug: show first 200 chars of error message
+        logger.debug(f"is_cookie_refresh_needed: error_lower[:200]='{error_lower[:200]}'")
+        logger.debug(f"is_cookie_refresh_needed: matches={matches}, result={result}")
 
         return result
 
