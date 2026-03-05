@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
+    BULL_REDIS_URL: Optional[str] = None  # Shared Redis for cookie queue coordination
 
     # Google Cloud Storage
     GCP_PROJECT_ID: str

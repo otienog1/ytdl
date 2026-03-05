@@ -13,13 +13,14 @@ class CookieRefreshService:
     def __init__(self):
         """Initialize Redis connection for Bull queue"""
         try:
-            # Bull uses Redis lists and hashes with specific key patterns
+            # Use shared Redis for cookie queue coordination (fallback to local if not configured)
+            redis_url = settings.BULL_REDIS_URL or settings.REDIS_URL
             self.redis_client = redis.from_url(
-                settings.REDIS_URL,
+                redis_url,
                 decode_responses=True
             )
             self.queue_name = "youtube:cookie:requests"  # Must match the queue name in cookie-worker.js
-            logger.info("Cookie refresh service initialized with Redis")
+            logger.info(f"Cookie refresh service initialized with Redis at {redis_url}")
         except Exception as e:
             logger.error(f"Failed to initialize cookie refresh service: {e}")
             self.redis_client = None
