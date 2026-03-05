@@ -128,10 +128,11 @@ class YouTubeService:
                     temp_cookies_file = self._create_temp_cookies_file(cookies)
                     use_cookies_file = temp_cookies_file
 
-                # Use Android client to reduce bot detection + skip DASH to prevent challenges
+                # When using cookies, use web client only (android doesn't support cookies)
+                # Without cookies, use android client (reduces bot detection)
                 if use_cookies_file:
                     cmd.extend(['--cookies', use_cookies_file])
-                    cmd.extend(['--extractor-args', 'youtube:player_client=android,web;skip=dash'])
+                    cmd.extend(['--extractor-args', 'youtube:player_client=web;skip=dash'])
                 else:
                     cmd.extend(['--extractor-args', 'youtube:player_client=android;skip=dash'])
 
