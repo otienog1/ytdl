@@ -93,8 +93,8 @@ class YouTubeService:
 
                 # 'nice' gives the OS/Redis priority over yt-dlp
                 cmd = ['nice', '-n', '10', self.yt_dlp_path, '--dump-json', '--no-playlist', '--flat-playlist']
-                # Use local EJS solver first, fallback to GitHub if local is unavailable
-                cmd.extend(["--js-runtimes", "node", "--remote-components", "ejs:local,ejs:github"])
+                # Use Node.js runtime and download EJS challenge solver from GitHub
+                cmd.extend(["--js-runtimes", "node", "--remote-components", "ejs:github"])
 
                 if self.ffmpeg_path != 'ffmpeg':
                     cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
@@ -192,7 +192,7 @@ class YouTubeService:
                 cmd = ['nice', '-n', '15', self.yt_dlp_path]
                 cmd.extend([
                     '--js-runtimes', 'node',
-                    '--remote-components', 'ejs:local,ejs:github',
+                    '--remote-components', 'ejs:github',
                     '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                     '--merge-output-format', 'mp4',
                     '--newline', '--no-part',
