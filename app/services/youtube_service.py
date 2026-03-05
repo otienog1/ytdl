@@ -18,6 +18,7 @@ from app.exceptions import (
 )
 from app.monitoring.metrics import metrics_tracker
 from app.services.cookie_refresh_service import cookie_refresh_service
+from app.services.youtube_cache_service import youtube_cache_service
 
 class YouTubeService:
     def __init__(self):
@@ -76,9 +77,22 @@ class YouTubeService:
             return False
 
     async def get_video_info(self, url: str, cookies: Optional[Dict[str, str]] = None) -> VideoInfo:
-        """Optimized for 1GB RAM and multi-server cookie stability"""
+        """Optimized with metadata caching and improved yt-dlp configuration"""
         with metrics_tracker.track_youtube_api('get_video_info'):
             video_id = self._extract_video_id(url)
+            
+            # Check cache first - reduces YouTube requests from 5-15 to 1 per video
+            cached_metadata = youtube_cache_service.get_cached_metadata(video_id)
+            if cached_metadata:
+                return VideoInfo(
+                    id=cached_metadata['id'],
+                    title=cached_metadata['title'],
+                    thumbnail=cached_metadata['thumbnail'],
+                    duration=cached_metadata.get('duration', 0),
+                    quality=f"{cached_metadata.get('height', 'N/A')}p" if cached_metadata.get('height') else None,
+                    file_size=self._format_file_size(cached_metadata.get('filesize')) if cached_metadata.get('filesize') else None
+                )
+            
             temp_cookies_file = None
 
             try:
@@ -92,9 +106,16 @@ class YouTubeService:
                     )
 
                 # 'nice' gives the OS/Redis priority over yt-dlp
-                cmd = ['nice', '-n', '10', self.yt_dlp_path, '--dump-json', '--no-playlist', '--flat-playlist']
-                # Use Node.js runtime and download EJS challenge solver from GitHub
-                cmd.extend(["--js-runtimes", "node", "--remote-components", "ejs:github"])
+                cmd = ['nice', '-n', '10', self.yt_dlp_path, '--dump-json', '--no-playlist']
+                
+                # Improved yt-dlp configuration (2026 stable setup)
+                cmd.extend([
+                    '--js-runtime', 'node',
+                    '--remote-components', 'ejs:github',
+                    '--retries', '10',
+                    '--fragment-retries', '10',
+                    '--socket-timeout', '30',
+                ])
 
                 if self.ffmpeg_path != 'ffmpeg':
                     cmd.extend(['--ffmpeg-location', os.path.dirname(self.ffmpeg_path)])
@@ -107,12 +128,12 @@ class YouTubeService:
                     temp_cookies_file = self._create_temp_cookies_file(cookies)
                     use_cookies_file = temp_cookies_file
 
+                # Use Android client to reduce bot detection + skip DASH to prevent challenges
                 if use_cookies_file:
                     cmd.extend(['--cookies', use_cookies_file])
-                    # Force web client when using cookies for consistency
-                    cmd.extend(['--extractor-args', 'youtube:player_client=web'])
+                    cmd.extend(['--extractor-args', 'youtube:player_client=android,web;skip=dash'])
                 else:
-                    cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
+                    cmd.extend(['--extractor-args', 'youtube:player_client=android;skip=dash'])
 
                 if self.proxy:
                     cmd.extend(['--proxy', self.proxy])
@@ -155,6 +176,14 @@ class YouTubeService:
                     raise VideoDownloadError(video_id, f"YT-DLP: {stderr.splitlines()[-1] if stderr else 'Unknown Error'}")
 
                 info = json.loads(stdout)
+                
+                # Cache metadata to reduce future YouTube requests
+                youtube_cache_service.cache_metadata(video_id, info, ttl=3600)
+                
+                # Extract and cache PO token if present (helps bypass bot detection)
+                if 'po_token' in info:
+                    youtube_cache_service.cache_po_token(video_id, info['po_token'], ttl=3600)
+                
                 return VideoInfo(
                     id=info['id'],
                     title=info['title'],
@@ -191,9 +220,13 @@ class YouTubeService:
                 # Limit resolution to 720p to prevent FFmpeg from crashing 1GB RAM
                 cmd = ['nice', '-n', '15', self.yt_dlp_path]
                 cmd.extend([
-                    '--js-runtimes', 'node',
+                    '--js-runtime', 'node',
                     '--remote-components', 'ejs:github',
-                    '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                    '--retries', '10',
+                    '--fragment-retries', '10',
+                    '--socket-timeout', '30',
+                    '--concurrent-fragments', '2',
+                    '-f', 'bv*[height<=720]+ba/b',  # Improved format selection
                     '--merge-output-format', 'mp4',
                     '--newline', '--no-part',
                     '-o', str(output_path),
