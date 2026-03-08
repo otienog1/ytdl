@@ -259,7 +259,7 @@ class InstagramService(BaseVideoService):
                                 # Scale progress to 20-80% range
                                 scaled = int(20 + (percentage * 0.6))
                                 if scaled > last_progress and progress_callback:
-                                    progress_callback(scaled, f"Downloading Instagram video: {percentage:.1f}%")
+                                    progress_callback(scaled)
                                     last_progress = scaled
 
                 process.wait()
