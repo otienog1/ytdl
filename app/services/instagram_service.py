@@ -147,10 +147,17 @@ class InstagramService(BaseVideoService):
                     # Handle common Instagram errors
                     stderr_lower = stderr.lower()
 
-                    if "login required" in stderr_lower or "not authorized" in stderr_lower:
+                    # Instagram login/auth errors - most common issue
+                    if any(phrase in stderr_lower for phrase in [
+                        "login required",
+                        "not authorized",
+                        "login page",
+                        "rate-limit reached or login",
+                        "requested content is not available"
+                    ]):
                         raise VideoNotFoundError(
                             video_id,
-                            "Instagram login required. Please provide authentication cookies."
+                            "Instagram requires login to access this content. Most Instagram videos require authentication."
                         )
 
                     if "private" in stderr_lower:
