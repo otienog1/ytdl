@@ -43,13 +43,19 @@ class MultiStorageService:
 
     async def upload_file(self, local_file_path: str, destination_file_name: str = None) -> Tuple[str, str, int]:
         """
-        Upload file to a randomly selected storage provider.
+        Upload file to a randomly selected storage provider with fallback.
 
         Returns:
             Tuple[url, provider, file_size]: Download URL, provider name, and file size in bytes
         """
-        # Select provider (raises StorageProviderNotAvailableError if none available)
-        provider = await self.select_random_provider()
+        # Get all available providers
+        available_providers = await storage_tracker.get_available_providers_under_limit()
+
+        if not available_providers:
+            raise StorageProviderNotAvailableError()
+
+        # Shuffle to randomize order
+        random.shuffle(available_providers)
 
         # Get file size
         file_size = os.path.getsize(local_file_path)
@@ -57,21 +63,40 @@ class MultiStorageService:
         # Generate unique filename
         file_name = self._generate_filename(destination_file_name)
 
-        # Upload based on provider
-        if provider == "gcs":
-            url = await self._upload_to_gcs(local_file_path, file_name)
-        elif provider == "azure":
-            url = await self._upload_to_azure(local_file_path, file_name)
-        elif provider == "s3":
-            url = await self._upload_to_s3(local_file_path, file_name)
-        else:
-            raise FileUploadError(provider, f"Unknown provider: {provider}")
+        # Try each provider until one succeeds
+        last_error = None
+        for provider in available_providers:
+            try:
+                logger.info(f"Attempting upload to {provider}: {file_name}")
 
-        # Track storage usage
-        await storage_tracker.add_file_usage(provider, file_size, file_name)
+                if provider == "gcs":
+                    url = await self._upload_to_gcs(local_file_path, file_name)
+                elif provider == "azure":
+                    url = await self._upload_to_azure(local_file_path, file_name)
+                elif provider == "s3":
+                    url = await self._upload_to_s3(local_file_path, file_name)
+                else:
+                    continue
 
-        logger.info(f"File uploaded to {provider}: {file_name} ({file_size} bytes)")
-        return url, provider, file_size
+                # Track storage usage
+                await storage_tracker.add_file_usage(provider, file_size, file_name)
+
+                logger.info(f"File uploaded to {provider}: {file_name} ({file_size} bytes)")
+                return url, provider, file_size
+
+            except FileUploadError as e:
+                logger.warning(f"Upload to {provider} failed: {e}, trying next provider...")
+                last_error = e
+                continue
+            except Exception as e:
+                logger.warning(f"Upload to {provider} failed: {e}, trying next provider...")
+                last_error = FileUploadError(provider, str(e))
+                continue
+
+        # All providers failed
+        if last_error:
+            raise last_error
+        raise FileUploadError("all", "All storage providers failed")
 
     def _generate_filename(self, destination_file_name: str = None) -> str:
         """Generate a unique filename"""
