@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/0"
 
+    # Admin Configuration
+    ADMIN_EMAIL: Optional[str] = None  # Admin user email for access control
+
     # Local binary paths (optional - set by setup_ffmpeg.py)
     FFMPEG_PATH: Optional[str] = None
     FFPROBE_PATH: Optional[str] = None
@@ -70,6 +73,9 @@ class Settings(BaseSettings):
     # YouTube Account Configuration (for multi-server setup)
     YT_ACCOUNT_ID: str = "default"  # Unique identifier for this server's YouTube account
     YT_DLP_COOKIES_FILE: Optional[str] = None  # Path to cookies file for this account
+
+    # Instagram Configuration
+    INSTAGRAM_COOKIES_FILE: Optional[str] = None  # Path to Instagram cookies file
 
     model_config = ConfigDict(
         env_file=".env",

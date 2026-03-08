@@ -24,6 +24,7 @@ from app.exceptions import (
 )
 from app.monitoring.metrics import metrics_tracker
 from app.services.base_video_service import BaseVideoService
+from app.services.instagram_cookie_refresh_service import instagram_cookie_refresh_service
 
 
 class InstagramService(BaseVideoService):
@@ -155,9 +156,14 @@ class InstagramService(BaseVideoService):
                         "rate-limit reached or login",
                         "requested content is not available"
                     ]):
+                        # Trigger Instagram cookie refresh
+                        if instagram_cookie_refresh_service.is_cookie_refresh_needed(stderr):
+                            logger.info("Triggering Instagram cookie refresh due to auth error")
+                            instagram_cookie_refresh_service.trigger_cookie_refresh(reason="login_required")
+
                         raise VideoNotFoundError(
                             video_id,
-                            "Instagram requires login to access this content. Most Instagram videos require authentication."
+                            "Instagram requires login to access this content. Cookie refresh has been triggered."
                         )
 
                     if "private" in stderr_lower:
@@ -287,8 +293,11 @@ class InstagramService(BaseVideoService):
                     error_msg = "Instagram download failed"
                     output_lower = error_output.lower()
 
-                    if "login required" in output_lower:
-                        error_msg = "Instagram login required for this content"
+                    if "login required" in output_lower or instagram_cookie_refresh_service.is_cookie_refresh_needed(error_output):
+                        # Trigger cookie refresh
+                        logger.info("Triggering Instagram cookie refresh due to download auth error")
+                        instagram_cookie_refresh_service.trigger_cookie_refresh(reason="download_login_required")
+                        error_msg = "Instagram login required for this content. Cookie refresh has been triggered."
                     elif "rate limit" in output_lower:
                         error_msg = "Instagram rate limit reached. Please try again later"
                     elif "not available" in output_lower:
