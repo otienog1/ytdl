@@ -1,8 +1,9 @@
 import asyncio
 from app.queue.celery_app import celery_app
-from app.services.youtube_service import youtube_service
+from app.services.video_service_factory import get_video_service, get_platform
 from app.services.storage_service import storage_service
 from app.utils.validators import extract_video_id
+from app.utils.platform_detector import Platform
 from app.utils.logger import logger
 from app.config.database import get_database, connect_to_mongo
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -38,28 +39,35 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict | N
     try:
         logger.info(f"Processing download job: {job_id}")
 
-        # Update status to processing
-        await _update_status(job_id, 'processing', progress=5)
+        # Detect platform and get appropriate service
+        platform = get_platform(url)
+        video_service = get_video_service(url)
+        logger.info(f"Detected platform: {platform.value}")
+
+        # Update status to processing with platform info
+        await _update_status(job_id, 'processing', progress=5, platform=platform.value)
         task.update_state(state='PROGRESS', meta={'progress': 5})
 
-        # Extract video ID first
-        video_id = extract_video_id(url)
+        # Extract video ID using platform-specific service
+        video_id = video_service.extract_video_id(url)
         if not video_id:
             raise Exception("Invalid video URL")
 
         # Check if this video was already processed BEFORE fetching info
-        # This avoids unnecessary YouTube API calls and downloads for duplicate videos
+        # This avoids unnecessary API calls and downloads for duplicate videos
+        # Include platform in deduplication to avoid cross-platform ID collisions
         db = await _get_db()
         existing_download = await db.downloads.find_one({
             'videoInfo.id': video_id,
+            'platform': platform.value,
             'status': 'completed',
             'downloadUrl': {'$exists': True, '$ne': None}
         })
 
         # Only fetch video info if we don't have it cached
         if not existing_download:
-            logger.info(f"Fetching video info for new video: {video_id}")
-            video_info = await youtube_service.get_video_info(url, cookies=cookies)
+            logger.info(f"Fetching video info for new {platform.value} video: {video_id}")
+            video_info = await video_service.get_video_info(url, cookies=cookies)
 
             await _update_status(
                 job_id,
@@ -138,11 +146,11 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict | N
                 except Exception as e:
                     logger.error(f"Error in progress callback: {e}", exc_info=True)
 
-            # Start download in background
+            # Start download in background using platform-specific service
             import concurrent.futures
             executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             download_future = executor.submit(
-                youtube_service.download_video_sync,
+                video_service.download_video_sync,
                 url,
                 video_id,
                 progress_callback,
@@ -189,12 +197,12 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict | N
             # Clean up local file - ensure this always happens
             try:
                 logger.info(f"Deleting local file: {local_file_path}")
-                await youtube_service.delete_local_file(local_file_path)
+                await video_service.delete_local_file(local_file_path)
                 logger.info(f"Successfully deleted local file: {local_file_path}")
             except Exception as cleanup_error:
                 logger.error(f"Failed to delete local file {local_file_path}: {cleanup_error}")
 
-        # Update status to completed with all data
+        # Update status to completed with all data including platform
         video_info_dict = video_info.model_dump(by_alias=True)
         await _update_status(
             job_id,
@@ -203,7 +211,8 @@ async def _process_download_async(task, url: str, job_id: str, cookies: dict | N
             downloadUrl=download_url,
             videoInfo=video_info_dict,
             storageProvider=storage_provider,
-            fileSize=file_size
+            fileSize=file_size,
+            platform=platform.value
         )
 
         logger.info(f"Download job completed: {job_id}")

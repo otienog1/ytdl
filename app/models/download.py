@@ -11,6 +11,12 @@ class DownloadStatus(str, Enum):
     FAILED = "failed"
 
 
+class Platform(str, Enum):
+    YOUTUBE = "youtube"
+    TIKTOK = "tiktok"
+    INSTAGRAM = "instagram"
+
+
 class VideoInfo(BaseModel):
     id: str
     title: str
@@ -29,6 +35,7 @@ class Download(BaseModel):
     download_url: Optional[str] = Field(None, alias="downloadUrl")
     error: Optional[str] = None
     user_id: Optional[str] = Field(None, alias="userId")
+    platform: Optional[str] = None  # youtube, tiktok, instagram
     created_at: datetime = Field(default_factory=datetime.utcnow, alias="createdAt")
     updated_at: datetime = Field(default_factory=datetime.utcnow, alias="updatedAt")
 
@@ -46,6 +53,7 @@ class DownloadResponse(BaseModel):
     video_info: Optional[VideoInfo] = Field(None, alias="videoInfo")
     download_url: Optional[str] = Field(None, alias="downloadUrl")
     error: Optional[str] = None
+    platform: Optional[str] = None
 
     class Config:
         populate_by_name = True

@@ -6,7 +6,7 @@ import uuid
 import re
 import asyncio
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Callable
 from app.utils.logger import logger
 from app.models.download import VideoInfo
 from app.config.settings import settings
@@ -19,8 +19,10 @@ from app.exceptions import (
 from app.monitoring.metrics import metrics_tracker
 from app.services.cookie_refresh_service import cookie_refresh_service
 from app.services.youtube_cache_service import youtube_cache_service
+from app.services.base_video_service import BaseVideoService
 
-class YouTubeService:
+
+class YouTubeService(BaseVideoService):
     def __init__(self):
         self.download_dir = Path("downloads")
         self.download_dir.mkdir(exist_ok=True)
@@ -31,7 +33,7 @@ class YouTubeService:
         self.account_id = settings.YT_ACCOUNT_ID
         self.proxy = os.getenv('YT_DLP_PROXY')
 
-    def _extract_video_id(self, url: str) -> str:
+    def extract_video_id(self, url: str) -> str:
         patterns = [
             r'(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})',
             r'youtube\.com\/embed\/([a-zA-Z0-9_-]{11})',
@@ -79,7 +81,7 @@ class YouTubeService:
     async def get_video_info(self, url: str, cookies: Optional[Dict[str, str]] = None) -> VideoInfo:
         """Optimized with metadata caching and improved yt-dlp configuration"""
         with metrics_tracker.track_youtube_api('get_video_info'):
-            video_id = self._extract_video_id(url)
+            video_id = self.extract_video_id(url)
             
             # Check cache first - reduces YouTube requests from 5-15 to 1 per video
             cached_metadata = youtube_cache_service.get_cached_metadata(video_id)
@@ -128,13 +130,13 @@ class YouTubeService:
                     temp_cookies_file = self._create_temp_cookies_file(cookies)
                     use_cookies_file = temp_cookies_file
 
-                # When using cookies, use web client only (android doesn't support cookies)
-                # Without cookies, use android client (reduces bot detection)
+                # Cookie handling - cookies alone provide best format access
+                # Don't use player_client extractor-args with cookies as it limits available formats
                 if use_cookies_file:
                     cmd.extend(['--cookies', use_cookies_file])
-                    cmd.extend(['--extractor-args', 'youtube:player_client=web;skip=dash'])
                 else:
-                    cmd.extend(['--extractor-args', 'youtube:player_client=android;skip=dash'])
+                    # Without cookies, use android client to reduce bot detection
+                    cmd.extend(['--extractor-args', 'youtube:player_client=android'])
 
                 if self.proxy:
                     cmd.extend(['--proxy', self.proxy])
@@ -218,7 +220,7 @@ class YouTubeService:
                 file_name = f"{video_id}_{uuid.uuid4().hex[:8]}.mp4"
                 output_path = self.download_dir / file_name
 
-                # Limit resolution to 720p to prevent FFmpeg from crashing 1GB RAM
+                # Download best available quality (cookies provide access to all formats)
                 cmd = ['nice', '-n', '15', self.yt_dlp_path]
                 cmd.extend([
                     '--js-runtime', 'node',
@@ -227,21 +229,23 @@ class YouTubeService:
                     '--fragment-retries', '10',
                     '--socket-timeout', '30',
                     '--concurrent-fragments', '2',
-                    '-f', 'bv*[height<=720]+ba/b',  # Improved format selection
+                    '-f', 'bv*+ba/b',  # Best video + best audio (or best combined format)
                     '--merge-output-format', 'mp4',
                     '--newline', '--no-part',
                     '-o', str(output_path),
                     url
                 ])
 
-                # Cookie Handling (Mirroring get_video_info)
+                # Cookie Handling - cookies alone provide best format access
+                # Don't use player_client extractor-args with cookies as it limits available formats
                 if self.cookies_file and os.path.exists(self.cookies_file):
-                    cmd.extend(['--cookies', self.cookies_file, '--extractor-args', 'youtube:player_client=web'])
+                    cmd.extend(['--cookies', self.cookies_file])
                 elif cookies:
                     temp_cookies_file = self._create_temp_cookies_file(cookies)
-                    cmd.extend(['--cookies', temp_cookies_file, '--extractor-args', 'youtube:player_client=web'])
+                    cmd.extend(['--cookies', temp_cookies_file])
                 else:
-                    cmd.extend(['--extractor-args', 'youtube:player_client=android,ios'])
+                    # Without cookies, use android client to reduce bot detection
+                    cmd.extend(['--extractor-args', 'youtube:player_client=android'])
 
                 process = subprocess.Popen(
                     cmd,
@@ -254,8 +258,10 @@ class YouTubeService:
                 )
 
                 last_progress = 0
+                output_lines = []
                 if process.stdout:
                     for line in process.stdout:
+                        output_lines.append(line.strip())
                         if '[download]' in line and '%' in line:
                             match = re.search(r'(\d+\.?\d*)%', line)
                             if match:
@@ -267,7 +273,18 @@ class YouTubeService:
 
                 process.wait()
                 if process.returncode != 0:
-                    raise VideoDownloadError(video_id, "Download failed after starting.")
+                    # Log the actual yt-dlp error output
+                    error_output = '\n'.join(output_lines[-10:])  # Last 10 lines
+                    logger.error(f"yt-dlp failed for {video_id}. Last output:\n{error_output}")
+
+                    # Check for specific error patterns
+                    error_msg = "Download failed"
+                    if any('bot' in line.lower() or 'sign in' in line.lower() for line in output_lines):
+                        error_msg = "YouTube bot detection triggered. Cookies may be expired or invalid."
+                    elif any('not available' in line.lower() for line in output_lines):
+                        error_msg = "Video format not available"
+
+                    raise VideoDownloadError(video_id, error_msg)
 
                 if not output_path.exists():
                     raise VideoDownloadError(video_id, "Downloaded file not found.")
