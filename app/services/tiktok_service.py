@@ -144,10 +144,19 @@ class TikTokService(BaseVideoService):
 
                 info = json.loads(stdout)
 
+                # Extract thumbnail - TikTok may have it in 'thumbnail' or 'thumbnails' array
+                thumbnail = info.get('thumbnail')
+                if not thumbnail and info.get('thumbnails'):
+                    # Get highest quality thumbnail from array
+                    thumbnails = info.get('thumbnails', [])
+                    if thumbnails:
+                        # Sort by preference (larger is better) or just take last one
+                        thumbnail = thumbnails[-1].get('url') if isinstance(thumbnails[-1], dict) else thumbnails[-1]
+
                 return VideoInfo(
                     id=info.get('id', video_id),
                     title=info.get('title', info.get('description', 'TikTok Video')[:100]),
-                    thumbnail=info.get('thumbnail'),
+                    thumbnail=thumbnail or '',
                     duration=info.get('duration', 0),
                     quality=f"{info.get('height', 'N/A')}p" if info.get('height') else None,
                     file_size=self._format_file_size(info.get('filesize')) if info.get('filesize') else None

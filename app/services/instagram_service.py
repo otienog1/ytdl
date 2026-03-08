@@ -175,10 +175,18 @@ class InstagramService(BaseVideoService):
                 # Instagram metadata structure
                 title = info.get('title') or info.get('description', '')[:100] or 'Instagram Video'
 
+                # Extract thumbnail - Instagram may have it in 'thumbnail' or 'thumbnails' array
+                thumbnail = info.get('thumbnail')
+                if not thumbnail and info.get('thumbnails'):
+                    # Get highest quality thumbnail from array
+                    thumbnails = info.get('thumbnails', [])
+                    if thumbnails:
+                        thumbnail = thumbnails[-1].get('url') if isinstance(thumbnails[-1], dict) else thumbnails[-1]
+
                 return VideoInfo(
                     id=info.get('id', video_id),
                     title=title,
-                    thumbnail=info.get('thumbnail'),
+                    thumbnail=thumbnail or '',
                     duration=info.get('duration', 0),
                     quality=f"{info.get('height', 'N/A')}p" if info.get('height') else None,
                     file_size=self._format_file_size(info.get('filesize')) if info.get('filesize') else None
